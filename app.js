@@ -24,16 +24,16 @@
   // --- Default Roles ---
   const DEFAULT_ROLES = ['店長', '正職', '工讀生'];
 
-  // --- Default Shifts Configuration (簡化：無英文名稱，支援假別標記) ---
+  // --- Default Shifts Configuration (簡化：留中文名稱、中文代碼、英文代碼、假別標記、字體顏色與透明色塊) ---
   const DEFAULT_SHIFTS = [
-    { id: 'shift_morning', name: '早班', code: '早', enCode: 'M', start: '08:00', end: '16:30', hours: 8, color: '#10b981', targetStaff: 2, isLeave: false },
-    { id: 'shift_middle', name: '中班', code: '中', enCode: 'MID', start: '12:00', end: '20:30', hours: 8, color: '#f59e0b', targetStaff: 1, isLeave: false },
-    { id: 'shift_evening', name: '晚班', code: '晚', enCode: 'E', start: '16:00', end: '00:30', hours: 8, color: '#8b5cf6', targetStaff: 2, isLeave: false },
-    { id: 'shift_night', name: '大夜班', code: '夜', enCode: 'N', start: '00:00', end: '08:30', hours: 8, color: '#3b82f6', targetStaff: 1, isLeave: false },
-    { id: 'shift_parttime', name: '支援短班', code: '短', enCode: 'PT', start: '18:00', end: '22:00', hours: 4, color: '#06b6d4', targetStaff: 1, isLeave: false },
-    { id: 'shift_off', name: '例休', code: '休', enCode: 'OFF', start: '-', end: '-', hours: 0, color: '#64748b', targetStaff: 0, isLeave: true },
-    { id: 'shift_personal', name: '事假', code: '事', enCode: 'PER', start: '-', end: '-', hours: 0, color: '#f97316', targetStaff: 0, isLeave: true },
-    { id: 'shift_sick', name: '病假', code: '病', enCode: 'SICK', start: '-', end: '-', hours: 0, color: '#ef4444', targetStaff: 0, isLeave: true }
+    { id: 'shift_morning', name: '早班', code: '早', enCode: 'M', start: '08:00', end: '16:30', hours: 8, color: '#10b981', textColor: '#ffffff', bgTransparent: false, targetStaff: 2, isLeave: false },
+    { id: 'shift_middle', name: '中班', code: '中', enCode: 'C', start: '12:00', end: '20:30', hours: 8, color: '#f59e0b', textColor: '#ffffff', bgTransparent: false, targetStaff: 1, isLeave: false },
+    { id: 'shift_evening', name: '晚班', code: '晚', enCode: 'E', start: '16:00', end: '00:30', hours: 8, color: '#8b5cf6', textColor: '#ffffff', bgTransparent: false, targetStaff: 2, isLeave: false },
+    { id: 'shift_night', name: '大夜班', code: '夜', enCode: 'N', start: '00:00', end: '08:30', hours: 8, color: '#3b82f6', textColor: '#ffffff', bgTransparent: false, targetStaff: 1, isLeave: false },
+    { id: 'shift_parttime', name: '支援短班', code: '短', enCode: 'P', start: '18:00', end: '22:00', hours: 4, color: '#06b6d4', textColor: '#ffffff', bgTransparent: false, targetStaff: 1, isLeave: false },
+    { id: 'shift_off', name: '例休', code: '休', enCode: 'O', start: '-', end: '-', hours: 0, color: '#64748b', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true },
+    { id: 'shift_personal', name: '事假', code: '事', enCode: 'L', start: '-', end: '-', hours: 0, color: '#f97316', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true },
+    { id: 'shift_sick', name: '病假', code: '病', enCode: 'S', start: '-', end: '-', hours: 0, color: '#ef4444', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true }
   ];
 
   // --- Default Staff Roster ---
@@ -280,11 +280,15 @@
           if (typeof s.leaveQuota !== 'number') s.leaveQuota = 8;
         });
 
-        // Normalize shifts: ensure isLeave flag
+        // Normalize shifts: ensure isLeave flag, textColor, bgTransparent, and 1-char codes
         state.shifts.forEach(s => {
           if (typeof s.isLeave !== 'boolean') {
             s.isLeave = s.id === 'shift_off' || s.hours === 0;
           }
+          if (!s.textColor) s.textColor = '#ffffff';
+          if (typeof s.bgTransparent !== 'boolean') s.bgTransparent = false;
+          if (s.code) s.code = s.code.slice(0, 1);
+          if (s.enCode) s.enCode = s.enCode.slice(0, 1).toUpperCase();
         });
       } else {
         initDefaultDemoData();
@@ -589,9 +593,11 @@
   function getShiftDisplayShort(shift) {
     if (!shift) return '-';
     if (state.shiftDisplayLang === 'en') {
-      return shift.enCode || shift.code || shift.name;
+      const code = shift.enCode || shift.code || shift.name || '';
+      return code.slice(0, 1).toUpperCase();
     }
-    return shift.code || shift.name;
+    const code = shift.code || shift.name || '';
+    return code.slice(0, 1);
   }
 
   function getShiftDisplayTitle(shift) {
@@ -617,18 +623,37 @@
     const currentDayIso = formatDateIso(currentDay);
     const dayOfWeek = currentDay.getDay();
 
-    // 1. Render Carousel Tabs
+    // 1. Render Carousel Tabs (指尖大小一格，顯示月/日(星期)與上班人數)
     if (elDateCarousel) {
       elDateCarousel.innerHTML = '';
+      const headcountRules = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
+
       periodDays.forEach((d, idx) => {
         const item = document.createElement('div');
         const isSelected = idx === state.selectedDayIndex;
-        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const dIso = formatDateIso(d);
+        const dow = d.getDay();
+        const isWk = dow === 0 || dow === 6;
 
-        item.className = `date-carousel-item ${isSelected ? 'active' : ''} ${isWeekend ? 'weekend' : ''}`;
+        let dayTarget = isWk ? headcountRules.weekendMin : headcountRules.weekdayMin;
+        if (headcountRules.customDates) {
+          const match = headcountRules.customDates.find(c => c.date === dIso);
+          if (match && typeof match.min === 'number') dayTarget = match.min;
+        }
+
+        let dayOnDuty = 0;
+        state.staff.forEach(s => {
+          const entry = getScheduleEntry(s.id, dIso);
+          if (entry && entry.shiftId) {
+            const shift = state.shifts.find(sh => sh.id === entry.shiftId);
+            if (shift && !shift.isLeave && shift.hours > 0) dayOnDuty++;
+          }
+        });
+
+        item.className = `day-chip date-carousel-item ${isSelected ? 'active' : ''} ${isWk ? 'is-weekend' : ''}`;
         item.innerHTML = `
-          <div class="day-name">${DAY_NAMES_SHORT_ZH[d.getDay()]}</div>
-          <div class="day-number">${d.getDate()}</div>
+          <div class="day-chip-name">${d.getMonth() + 1}/${d.getDate()}(${DAY_NAMES_SHORT_ZH[dow]})</div>
+          <div class="day-chip-badge ${dayOnDuty >= dayTarget ? 'is-sufficient' : 'is-shortage'}">${dayOnDuty}人上班</div>
         `;
         item.addEventListener('click', () => {
           state.selectedDayIndex = idx;
@@ -677,9 +702,9 @@
     if (elDaySummaryHeadcount) {
       const isAdequate = onDutyCount >= targetHeadcount;
       elDaySummaryHeadcount.innerHTML = `
-        執勤 <b>${onDutyCount}</b> / 標準 <b>${targetHeadcount}</b> 人
+        上班人數 <b>${onDutyCount}</b> / 標準 <b>${targetHeadcount}</b> 人
         <span class="headcount-status-badge ${isAdequate ? 'status-ok' : 'status-shortage'}">
-          ${isAdequate ? '人力充足' : '執勤不足'}
+          ${isAdequate ? '人力充足' : '人數不足'}
         </span>
       `;
     }
@@ -695,11 +720,11 @@
 
         let badgeHtml = '';
         if (shift) {
-          const isOff = shift.isLeave || shift.hours === 0;
           const shiftText = getShiftDisplayTitle(shift);
           const otBadge = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}h加班</span>` : '';
+          const bgStyle = shift.bgTransparent ? 'background:transparent;border:1px dashed var(--border-color);' : `background:${shift.color};`;
           badgeHtml = `
-            <div class="mobile-shift-badge" style="background:${shift.color};color:#ffffff;">
+            <div class="mobile-shift-badge" style="${bgStyle}color:${shift.textColor || '#ffffff'};">
               <span>${escapeHtml(shiftText)} ${shift.hours > 0 ? `(${shift.hours}h)` : ''}</span>
               ${otBadge}
             </div>
@@ -773,6 +798,7 @@
 
       days.forEach(d => {
         const dateIso = formatDateIso(d);
+        const dayTitle = `${d.getMonth() + 1}/${d.getDate()}(${DAY_NAMES_SHORT_ZH[d.getDay()]})`;
         const dayName = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_ZH[d.getDay()];
         const entry = getScheduleEntry(staff.id, dateIso);
         const shift = entry && entry.shiftId ? state.shifts.find(s => s.id === entry.shiftId) : null;
@@ -780,17 +806,22 @@
         const pill = document.createElement('div');
         pill.className = 'staff-day-pill';
         if (shift) {
-          pill.style.backgroundColor = shift.color;
-          pill.style.borderColor = 'transparent';
+          if (shift.bgTransparent) {
+            pill.classList.add('is-transparent');
+            pill.style.backgroundColor = 'transparent';
+          } else {
+            pill.style.backgroundColor = shift.color;
+            pill.style.borderColor = 'transparent';
+          }
           const codeText = getShiftDisplayShort(shift);
           const otText = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}h</span>` : '';
           pill.innerHTML = `
-            <span class="staff-day-pill-name" style="color:rgba(255,255,255,0.85);">${dayName.replace('週', '')}</span>
-            <span class="staff-day-pill-code" style="color:#ffffff;">${codeText} ${otText}</span>
+            <span class="staff-day-pill-name" style="font-size:0.62rem;white-space:nowrap;">${dayTitle}</span>
+            <span class="staff-day-pill-code" style="color:${shift.textColor || '#ffffff'};font-weight:800;">${codeText} ${otText}</span>
           `;
         } else {
           pill.innerHTML = `
-            <span class="staff-day-pill-name">${dayName.replace('週', '')}</span>
+            <span class="staff-day-pill-name" style="font-size:0.62rem;white-space:nowrap;">${dayTitle}</span>
             <span class="staff-day-pill-code" style="color:var(--text-muted);">-</span>
           `;
         }

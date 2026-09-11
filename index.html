@@ -69,15 +69,16 @@
           智慧自動排班
         </button>
 
-        <button id="btn-export-excel" class="btn btn-secondary" title="匯出為標準雙段式 EXCEL 格式">
+        <button id="btn-export-excel" class="btn btn-secondary" title="匯出為標準雙段式 EXCEL 或 CSV 格式">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           匯出 EXCEL
         </button>
 
-        <button id="btn-print" class="btn btn-secondary" title="列印排版或另存為 PDF">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          列印
+        <button id="btn-import-csv" class="btn btn-secondary" title="匯入 CSV 備份記錄與設定">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          匯入
         </button>
+        <input type="file" id="input-import-file" accept=".csv,.json" style="display:none;">
 
         <button id="btn-theme-toggle" class="btn btn-icon-only" aria-label="切換深淺色主題" title="切換深淺主題">
           <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
@@ -87,63 +88,63 @@
 
     <!-- KPI Dashboard Summary Cards -->
     <section class="analytics-grid" aria-label="排班數據分析">
-      <!-- 當期工時卡片 (可點擊查看個別員工) -->
-      <div class="stat-card stat-card-clickable" id="card-hours" title="點擊查看個別員工工時明細">
+      <!-- 員工工時卡片 (顯示超標人數) -->
+      <div class="stat-card stat-card-clickable" id="card-hours" title="點擊查看個別員工工時明細與設定上限">
         <div class="stat-icon-wrapper stat-icon-hours">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 10"></polyline></svg>
         </div>
         <div class="stat-content">
           <div class="stat-label" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>當期總工時</span>
-            <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊明細 👁️</span>
+            <span>員工工時</span>
+            <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊查看 👁️</span>
           </div>
-          <div id="stat-total-hours" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">小時</span></div>
-          <div id="stat-avg-hours" class="stat-subtext">人均工時：0 小時</div>
+          <div id="stat-total-hours" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">人超標</span></div>
+          <div id="stat-avg-hours" class="stat-subtext">當期工時超標人數：0 人</div>
         </div>
       </div>
 
-      <!-- 休假統計卡片 (原排班總人次) -->
-      <div class="stat-card stat-card-clickable" id="card-leaves" title="點擊查看個別員工休假紀錄">
+      <!-- 休假未休卡片 (顯示未休完應休天數人數) -->
+      <div class="stat-card stat-card-clickable" id="card-leaves" title="點擊管理每人應休天數與休假紀錄">
         <div class="stat-icon-wrapper stat-icon-shifts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         </div>
         <div class="stat-content">
           <div class="stat-label" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>本月休假統計</span>
+            <span>休假未休</span>
             <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊管理 📋</span>
           </div>
-          <div id="stat-total-shifts" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">天</span></div>
-          <div id="stat-coverage-rate" class="stat-subtext">班表排班人次：-</div>
+          <div id="stat-total-shifts" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">人未休完</span></div>
+          <div id="stat-coverage-rate" class="stat-subtext">本月未達應休天數人數</div>
         </div>
       </div>
 
-      <!-- 預估薪資卡片 (可點擊查看個別員工) -->
+      <!-- 薪資支出卡片 -->
       <div class="stat-card stat-card-clickable" id="card-cost" title="點擊查看個別員工薪資細項">
         <div class="stat-icon-wrapper stat-icon-cost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
         <div class="stat-content">
           <div class="stat-label" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>預估薪資支出</span>
+            <span>薪資支出</span>
             <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊明細 💰</span>
           </div>
           <div id="stat-total-cost" class="stat-value">NT$ 0</div>
-          <div class="stat-subtext" id="stat-cost-subtext">依時薪 + 加班倍率精算</div>
+          <div class="stat-subtext" id="stat-cost-subtext">依時薪 + 加班倍率計算</div>
         </div>
       </div>
 
-      <!-- Clickable Alert Card -->
-      <div class="stat-card stat-card-clickable" id="card-alert" title="點擊查看異常明細或自訂法規規則">
+      <!-- 除錯設定卡片 (原法規與衝突警示) -->
+      <div class="stat-card stat-card-clickable" id="card-alert" title="點擊開啟除錯設定（目前異常、規則設定、人力設定）">
         <div class="stat-icon-wrapper stat-icon-alerts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
         </div>
         <div class="stat-content">
           <div class="stat-label" style="display:flex;justify-content:space-between;align-items:center;">
-            <span>法規與衝突警示</span>
-            <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊查看 ⚙️</span>
+            <span>除錯設定</span>
+            <span style="font-size:0.7rem;color:var(--accent-primary);text-decoration:underline;">點擊設定 ⚙️</span>
           </div>
           <div id="stat-alert-count" class="stat-value" style="color:var(--accent-success);">0 <span style="font-size:0.85rem;font-weight:500;">項異常</span></div>
-          <div id="stat-alert-desc" class="stat-subtext">工時合規・無排班衝突</div>
+          <div id="stat-alert-desc" class="stat-subtext">目前異常・規則設定・人力設定</div>
         </div>
       </div>
     </section>
@@ -317,10 +318,13 @@
         <div class="overtime-input-row" id="overtime-input-row">
           <label class="overtime-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            當日加班時數：
+            當日加班：
           </label>
           <input type="number" id="input-overtime-hours" class="overtime-input" value="0" min="0" max="12" step="0.5" placeholder="0">
           <span class="overtime-unit">小時</span>
+          <button id="btn-save-drawer-ot" class="btn btn-primary" style="padding:0.25rem 0.65rem;font-size:0.75rem;margin-left:auto;">
+            💾 儲存加班
+          </button>
         </div>
 
         <div class="drawer-shifts-grid" id="drawer-shifts-list"></div>
@@ -353,17 +357,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
       <span>班別</span>
     </button>
-    <button class="mobile-nav-btn" id="m-btn-rules">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg>
-      <span>警示</span>
-    </button>
     <button class="mobile-nav-btn" id="m-btn-export">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       <span>匯出</span>
     </button>
-    <button class="mobile-nav-btn" id="m-btn-print">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-      <span>列印</span>
+    <button class="mobile-nav-btn" id="m-btn-import">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <span>匯入</span>
     </button>
     <button class="mobile-nav-btn" id="m-btn-theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="m-theme-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
@@ -379,7 +379,7 @@
       <div class="modal-header">
         <h3 id="modal-staff-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-          人員名冊與職能角色管理
+          人員名冊與職稱管理
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-staff">&times;</button>
       </div>
@@ -387,14 +387,14 @@
         <!-- Section: Custom Role Management -->
         <div class="card-embedded">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
-            <span style="font-weight:700;font-size:0.85rem;color:var(--text-primary);">🏢 職能角色清單 (可自定義增減)</span>
+            <span style="font-weight:700;font-size:0.85rem;color:var(--text-primary);">🏢 職稱清單 (可自定義增減，預設店長、正職、工讀生皆可刪除)</span>
           </div>
           <div class="roles-chips-container" id="roles-chips-list">
             <!-- Dynamic Role Chips with delete button -->
           </div>
           <div style="display:flex;gap:0.45rem;margin-top:0.6rem;">
-            <input type="text" id="input-new-role" class="form-control" placeholder="輸入新角色名稱 (如: 副店長、組長)" style="font-size:0.8rem;padding:0.4rem 0.65rem;">
-            <button id="btn-add-role" class="btn btn-secondary" style="font-size:0.8rem;padding:0.4rem 0.75rem;">＋ 新增角色</button>
+            <input type="text" id="input-new-role" class="form-control" placeholder="輸入新職稱名稱 (如: 副店長、組長)" style="font-size:0.8rem;padding:0.4rem 0.65rem;">
+            <button id="btn-add-role" class="btn btn-secondary" style="font-size:0.8rem;padding:0.4rem 0.75rem;">＋ 新增職稱</button>
           </div>
         </div>
 
@@ -421,7 +421,7 @@
               <input type="text" id="staff-name" class="form-control" placeholder="例：林店長、陳小美" required>
             </div>
             <div class="form-group">
-              <label for="staff-role">職能角色 *</label>
+              <label for="staff-role">職稱 *</label>
               <select id="staff-role" class="form-control">
                 <!-- Dynamically populated from state.roles -->
               </select>
@@ -478,7 +478,7 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 2: Shift Templates (簡化：只留中文名稱、中文代碼、英文代碼、顏色)
+       Modal 2: Shift Templates (簡化：代碼限1字、可設字體顏色與底色透明、休假可刪除)
        ========================================================================== -->
   <div id="modal-shifts" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-shifts-title">
     <div class="modal-dialog">
@@ -494,22 +494,35 @@
           <div class="form-row">
             <div class="form-group">
               <label for="shift-name">班別中文名稱 *</label>
-              <input type="text" id="shift-name" class="form-control" placeholder="例：早班、晚班" required>
+              <input type="text" id="shift-name" class="form-control" placeholder="例：早班、休假" required>
             </div>
             <div class="form-group">
-              <label for="shift-code">中文代碼 (1~2字) *</label>
-              <input type="text" id="shift-code" class="form-control" placeholder="例：早、中、晚、夜" maxlength="2" required>
+              <label for="shift-code">中文代碼 (限1字) *</label>
+              <input type="text" id="shift-code" class="form-control" placeholder="例：早、中、晚、夜、休" maxlength="1" required>
             </div>
           </div>
 
           <div class="form-row" style="margin-top:0.75rem;">
             <div class="form-group">
-              <label for="shift-en-code">英文代碼 (例: M, E, N) *</label>
-              <input type="text" id="shift-en-code" class="form-control" placeholder="例：M, E, N, OFF" maxlength="5" required>
+              <label for="shift-en-code">英文代碼 (限1字大寫) *</label>
+              <input type="text" id="shift-en-code" class="form-control" placeholder="例：M、E、N、O" maxlength="1" style="text-transform:uppercase;" required>
             </div>
             <div class="form-group">
-              <label for="shift-color">色塊代表顏色</label>
+              <label for="shift-text-color">字體代碼顏色</label>
+              <input type="color" id="shift-text-color" class="form-control" value="#ffffff" style="height:42px;padding:2px 4px;cursor:pointer;">
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top:0.75rem;">
+            <div class="form-group">
+              <label for="shift-color">色塊底色</label>
               <input type="color" id="shift-color" class="form-control" value="#10b981" style="height:42px;padding:2px 4px;cursor:pointer;">
+            </div>
+            <div class="form-group" style="justify-content:center;">
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-top:1.2rem;">
+                <input type="checkbox" id="shift-bg-transparent" style="width:16px;height:16px;">
+                <span>底色透明（無色塊，僅顯示字體代碼）</span>
+              </label>
             </div>
           </div>
 
@@ -539,7 +552,7 @@
           <div class="form-group" style="margin-top:0.75rem;">
             <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
               <input type="checkbox" id="shift-is-leave" style="width:16px;height:16px;">
-              <span>此班別屬於假別（計入休假統計，如：休假、事假、病假）</span>
+              <span>此班別屬於假別（計入休假未休統計，如：例休、事假、病假）</span>
             </label>
           </div>
 
@@ -562,23 +575,23 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 3: Compliance Violations & Custom Rules (含執勤人力充足設定)
+       Modal 3: Debugging Settings (除錯設定：目前異常、規則設定、人力設定)
        ========================================================================== -->
   <div id="modal-rules" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-rules-title">
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h3 id="modal-rules-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg>
-          法規與衝突警示明細及規則設定
+          除錯設定
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-rules">&times;</button>
       </div>
       <div class="modal-body">
         <!-- Tab Switcher -->
         <div class="modal-tab-bar">
-          <button id="tab-btn-violations" class="modal-tab-btn active">🚨 目前異常明細</button>
-          <button id="tab-btn-rules-settings" class="modal-tab-btn">⚙️ 法規規則設定</button>
-          <button id="tab-btn-headcount-rules" class="modal-tab-btn">👥 執勤人力充足</button>
+          <button id="tab-btn-violations" class="modal-tab-btn active">🚨 目前異常</button>
+          <button id="tab-btn-rules-settings" class="modal-tab-btn">⚙️ 規則設定</button>
+          <button id="tab-btn-headcount-rules" class="modal-tab-btn">👥 人力設定</button>
         </div>
 
         <!-- Tab 1: Current Violations List -->
@@ -610,16 +623,16 @@
             </div>
 
             <div style="display:flex;justify-content:flex-end;">
-              <button type="submit" class="btn btn-primary">儲存法規規則</button>
+              <button type="submit" class="btn btn-primary">儲存規則設定</button>
             </div>
           </form>
         </div>
 
-        <!-- Tab 3: Headcount Requirements (執勤人力充足) -->
+        <!-- Tab 3: Headcount Requirements (人力設定) -->
         <div id="tab-content-headcount-rules" class="tab-content-panel" style="display:none;">
           <div style="display:flex;flex-direction:column;gap:1rem;">
             <div class="card-embedded">
-              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">📅 平日每日最低執勤人數</h4>
+              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">📅 平日每日最低上班人數</h4>
               <div style="display:flex;align-items:center;gap:0.75rem;">
                 <label style="font-size:0.825rem;color:var(--text-secondary);white-space:nowrap;">平日（週一至週五）：</label>
                 <input type="number" id="rule-weekday-headcount" class="form-control" value="3" min="0" max="50" style="width:90px;">
@@ -628,7 +641,7 @@
             </div>
 
             <div class="card-embedded">
-              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">🎉 假日每日最低執勤人數</h4>
+              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">🎉 假日每日最低上班人數</h4>
               <div style="display:flex;align-items:center;gap:0.75rem;">
                 <label style="font-size:0.825rem;color:var(--text-secondary);white-space:nowrap;">假日（週六、週日）：</label>
                 <input type="number" id="rule-holiday-headcount" class="form-control" value="2" min="0" max="50" style="width:90px;">
@@ -637,8 +650,8 @@
             </div>
 
             <div class="card-embedded">
-              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">📌 自訂義特定日期人力需求</h4>
-              <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">例如特定活動日、假日補班日等需要不同人力配置的日期。</p>
+              <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.6rem;">📌 自訂義特定日期上班人數</h4>
+              <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">特定活動日、補班日等需要不同人力配置的日期。</p>
               <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;margin-bottom:0.6rem;">
                 <input type="date" id="input-custom-headcount-date" class="form-control" style="flex:1;min-width:140px;">
                 <input type="number" id="input-custom-headcount-num" class="form-control" value="5" min="0" max="50" style="width:80px;" placeholder="人數">
@@ -651,7 +664,7 @@
             </div>
 
             <div style="display:flex;justify-content:flex-end;">
-              <button id="btn-save-headcount-rules" class="btn btn-primary">儲存人力規則</button>
+              <button id="btn-save-headcount-rules" class="btn btn-primary">儲存人力設定</button>
             </div>
           </div>
         </div>
@@ -694,7 +707,7 @@
         <!-- Rule 2: Role Shift Restrictions -->
         <div class="card-embedded">
           <h4 style="font-size:0.875rem;font-weight:700;color:var(--text-primary);margin-bottom:0.4rem;">
-            🔒 職位班別限制 (特定職能不可上特定班別)
+            🔒 職稱班別限制 (特定職稱不可上特定班別)
           </h4>
           <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;">
             <select id="select-role-restrict-role" class="form-control" style="flex:1;min-width:120px;"></select>
@@ -726,14 +739,14 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 5: Staff Hours Detail (個別員工工時明細)
+       Modal 5: Staff Hours Detail (員工工時明細與當期上限設定)
        ========================================================================== -->
   <div id="modal-hours-detail" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-hours-title">
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h3 id="modal-hours-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          個別員工工時明細
+          員工工時明細與上限設定
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-hours-detail">&times;</button>
       </div>
@@ -747,14 +760,14 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 6: Staff Cost Detail (個別員工薪資明細)
+       Modal 6: Staff Cost Detail (薪資支出細項)
        ========================================================================== -->
   <div id="modal-cost-detail" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-cost-title">
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h3 id="modal-cost-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-          個別員工薪資細項
+          薪資支出細項
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-cost-detail">&times;</button>
       </div>
@@ -768,14 +781,14 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 7: Leave Management (休假管理)
+       Modal 7: Leave Management (休假未休管理)
        ========================================================================== -->
   <div id="modal-leaves" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-leaves-title">
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h3 id="modal-leaves-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
-          本月休假統計與管理
+          休假未休管理與假別明細
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-leaves">&times;</button>
       </div>
@@ -801,14 +814,14 @@
   </div>
 
   <!-- ==========================================================================
-       Modal 8: Excel Export Options (匯出設定)
+       Modal 8: Excel / CSV Export Options (匯出設定)
        ========================================================================== -->
   <div id="modal-excel-options" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-excel-title">
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h3 id="modal-excel-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          EXCEL 匯出設定
+          EXCEL / CSV 匯出設定
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-excel-options">&times;</button>
       </div>
@@ -817,19 +830,19 @@
 
           <!-- 語言與顏色 -->
           <div class="card-embedded">
-            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">🌐 顯示語言與樣式</h4>
+            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">🌐 顯示語言與樣式 (預設英文代碼、無底色)</h4>
             <div class="form-row">
               <div class="form-group">
                 <label for="excel-lang">班別顯示語言</label>
                 <select id="excel-lang" class="form-control">
+                  <option value="en" selected>英文代碼（如 M, E, N）</option>
                   <option value="zh">中文（中文名稱 [代碼]）</option>
-                  <option value="en">英文代碼（如 M, E, N）</option>
                 </select>
               </div>
               <div class="form-group">
                 <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-top:1.5rem;">
-                  <input type="checkbox" id="excel-show-color" checked style="width:16px;height:16px;">
-                  <span>顯示班別底色（彩色背景）</span>
+                  <input type="checkbox" id="excel-show-color" style="width:16px;height:16px;">
+                  <span>顯示班別底色（預設未勾選：無顏色空白色塊）</span>
                 </label>
               </div>
             </div>
@@ -837,85 +850,95 @@
 
           <!-- 員工顯示格式 -->
           <div class="card-embedded">
-            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">👤 員工欄顯示格式</h4>
+            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">👤 員工欄顯示格式 (預設只顯示姓名)</h4>
             <div class="form-group">
               <label for="excel-staff-format">員工名稱顯示方式</label>
               <select id="excel-staff-format" class="form-control">
-                <option value="name-only">只顯示姓名（如：林雅婷）</option>
-                <option value="name-role">姓名 + 職稱（如：林雅婷（店長））</option>
+                <option value="name-only" selected>只顯示姓名</option>
+                <option value="name-role">姓名 + 職稱</option>
               </select>
             </div>
           </div>
 
           <!-- 日期格式 -->
           <div class="card-embedded">
-            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">📅 日期 / 星期格式</h4>
+            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">📅 日期 / 星期格式 (預設斜線、單字)</h4>
             <div class="form-row">
               <div class="form-group">
                 <label for="excel-date-format">日期格式</label>
                 <select id="excel-date-format" class="form-control">
-                  <option value="num">只顯示數字（如：1, 2, 15）</option>
-                  <option value="slash">斜線格式（如：9/1, 9/2）</option>
-                  <option value="mmdd">四位格式（如：0901, 0902）</option>
+                  <option value="slash" selected>斜線格式（如：9/1）</option>
+                  <option value="num">只顯示數字（如：1, 2）</option>
+                  <option value="mmdd">四位格式（如：0901）</option>
                 </select>
               </div>
               <div class="form-group">
                 <label for="excel-week-format">星期格式</label>
                 <select id="excel-week-format" class="form-control">
-                  <option value="full">完整顯示（如：星期一）</option>
+                  <option value="char" selected>單字（如：一, 二, 三）</option>
                   <option value="short">週x格式（如：週一）</option>
-                  <option value="char">單字（如：一, 二, 三）</option>
+                  <option value="full">完整顯示（如：星期一）</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <!-- 自訂義標題行 -->
+          <!-- 自訂義標題行 (預設皆為空白) -->
           <div class="card-embedded">
-            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">✏️ 自訂義標題列（A1~P1 / A12~P12 / 交叉標題欄）</h4>
+            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">✏️ 自訂義標題列 (預設皆留空白不合併)</h4>
             <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">
-              A1~P1 為上半月大標題列，A12~P12 為下半月大標題列。可自由輸入文字；<b>若留空白，EXCEL 將不會合併這列，保持獨立單元格！</b>
+              A1~P1 為上半月大標題列，A12~P12 為下半月大標題列。<b>預設空白，EXCEL 將不會合併這列，保持獨立單元格！</b>
             </p>
             <div class="form-row">
               <div class="form-group">
                 <label for="excel-title-top">上半月大標題（A1~P1）</label>
-                <input type="text" id="excel-title-top" class="form-control" placeholder="例：2026年9月份員工排班總表（留空則此列不合併）">
+                <input type="text" id="excel-title-top" class="form-control" value="" placeholder="預設空白不合併，可自訂">
               </div>
               <div class="form-group">
                 <label for="excel-title-bottom">下半月大標題（A12~P12）</label>
-                <input type="text" id="excel-title-bottom" class="form-control" placeholder="例：2026年9月份員工排班總表（下半月）（留空則此列不合併）">
+                <input type="text" id="excel-title-bottom" class="form-control" value="" placeholder="預設空白不合併，可自訂">
               </div>
             </div>
             <div class="form-row" style="margin-top:0.6rem;">
               <div class="form-group">
-                <label for="excel-header-a2">A2 上半月交叉欄（員工/日期）</label>
-                <input type="text" id="excel-header-a2" class="form-control" value="員工 \ 日期" placeholder="可自訂或留空">
+                <label for="excel-header-a2">A2 上半月交叉欄</label>
+                <input type="text" id="excel-header-a2" class="form-control" value="" placeholder="預設空白，可自訂">
               </div>
               <div class="form-group">
                 <label for="excel-header-a3">A3 上半月星期欄</label>
-                <input type="text" id="excel-header-a3" class="form-control" value="星期" placeholder="可自訂或留空">
+                <input type="text" id="excel-header-a3" class="form-control" value="" placeholder="預設空白，可自訂">
               </div>
             </div>
             <div class="form-row" style="margin-top:0.6rem;">
               <div class="form-group">
-                <label for="excel-header-a13">A13 下半月交叉欄（員工/日期）</label>
-                <input type="text" id="excel-header-a13" class="form-control" value="員工 \ 日期" placeholder="可自訂或留空">
+                <label for="excel-header-a13">A13 下半月交叉欄</label>
+                <input type="text" id="excel-header-a13" class="form-control" value="" placeholder="預設空白，可自訂">
               </div>
               <div class="form-group">
                 <label for="excel-header-a14">A14 下半月星期欄</label>
-                <input type="text" id="excel-header-a14" class="form-control" value="星期" placeholder="可自訂或留空">
+                <input type="text" id="excel-header-a14" class="form-control" value="" placeholder="預設空白，可自訂">
               </div>
             </div>
           </div>
 
         </div>
       </div>
-      <div class="modal-footer">
-        <button id="btn-do-export-excel" class="btn btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          確認匯出 EXCEL
-        </button>
-        <button class="btn btn-secondary modal-close-btn" data-close="modal-excel-options">取消</button>
+      <div class="modal-footer" style="flex-wrap:wrap;justify-content:space-between;gap:0.5rem;">
+        <div>
+          <button id="btn-save-export-default" class="btn btn-secondary" title="將目前的匯出偏好設定儲存為未來的預設值">
+            💾 儲存為預設值
+          </button>
+          <button id="btn-export-csv" class="btn btn-secondary" title="匯出 CSV 檔，方便備份或轉移裝置">
+            📄 匯出 CSV 備份
+          </button>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+          <button id="btn-do-export-excel" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            確認匯出 EXCEL
+          </button>
+          <button class="btn btn-secondary modal-close-btn" data-close="modal-excel-options">取消</button>
+        </div>
       </div>
     </div>
   </div>
