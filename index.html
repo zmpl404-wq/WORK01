@@ -2,9 +2,9 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ShiftMaster Pro - 智慧網頁排班與工時管理系統</title>
-  <meta name="description" content="現代化、視覺化的網頁排班系統，支援人員工時限制、自訂班別範本、防呆衝突警告、一鍵智慧自動排班與 Excel/CSV 匯出。">
+  <meta name="description" content="現代化、視覺化且支援手機直式作業的網頁排班系統，支援人員工時限制、自訂班別、防呆衝突警告、一鍵智慧自動排班與 Excel/CSV 匯出。">
   
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,9 +41,9 @@
         <div class="brand-title-group">
           <h1>
             ShiftMaster Pro
-            <span class="badge-pro">PRO EDITION</span>
+            <span class="badge-pro">MOBILE & WEB</span>
           </h1>
-          <p>智慧排班看板・工時成本精算・合規防呆檢測</p>
+          <p>智慧排班看板・工時成本精算・手機直式便利作業</p>
         </div>
       </div>
 
@@ -80,15 +80,15 @@
       </nav>
     </header>
 
-    <!-- KPI Dashboard Summary Cards -->
+    <!-- KPI Dashboard Summary Cards (Responsive on Mobile) -->
     <section class="analytics-grid" aria-label="排班數據分析">
       <div class="stat-card">
         <div class="stat-icon-wrapper stat-icon-hours">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 10"></polyline></svg>
         </div>
         <div class="stat-content">
-          <div class="stat-label">當週總排班工時</div>
-          <div id="stat-total-hours" class="stat-value">0 <span style="font-size:0.9rem;font-weight:500;">小時</span></div>
+          <div class="stat-label">當週總工時</div>
+          <div id="stat-total-hours" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">小時</span></div>
           <div id="stat-avg-hours" class="stat-subtext">人均工時：0 小時</div>
         </div>
       </div>
@@ -98,8 +98,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
         </div>
         <div class="stat-content">
-          <div class="stat-label">總排班人次 / 出勤率</div>
-          <div id="stat-total-shifts" class="stat-value">0 <span style="font-size:0.9rem;font-weight:500;">人次</span></div>
+          <div class="stat-label">總排班人次</div>
+          <div id="stat-total-shifts" class="stat-value">0 <span style="font-size:0.85rem;font-weight:500;">人次</span></div>
           <div id="stat-coverage-rate" class="stat-subtext">在崗覆蓋率：100%</div>
         </div>
       </div>
@@ -109,9 +109,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
         <div class="stat-content">
-          <div class="stat-label">預估人事薪資成本</div>
+          <div class="stat-label">預估薪資支出</div>
           <div id="stat-total-cost" class="stat-value">NT$ 0</div>
-          <div class="stat-subtext">依各員時薪/薪資即時精算</div>
+          <div class="stat-subtext">依時薪即時精算</div>
         </div>
       </div>
 
@@ -120,21 +120,21 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
         </div>
         <div class="stat-content">
-          <div class="stat-label">排班異常與法規警示</div>
-          <div id="stat-alert-count" class="stat-value" style="color:var(--accent-success);">0 <span style="font-size:0.9rem;font-weight:500;">項異常</span></div>
-          <div id="stat-alert-desc" class="stat-subtext">無連續工作超時或衝突</div>
+          <div class="stat-label">法規與衝突警示</div>
+          <div id="stat-alert-count" class="stat-value" style="color:var(--accent-success);">0 <span style="font-size:0.85rem;font-weight:500;">項異常</span></div>
+          <div id="stat-alert-desc" class="stat-subtext">工時合規・無排班衝突</div>
         </div>
       </div>
     </section>
 
-    <!-- Schedule Controls Bar -->
-    <section class="controls-bar" aria-label="排班日期與控制">
+    <!-- Schedule Controls & View Switcher Bar -->
+    <section class="controls-bar" aria-label="排班控制項">
       <div class="date-navigator">
         <button id="btn-prev-week" class="btn btn-icon-only" title="上一週">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
 
-        <button id="btn-current-week" class="btn btn-secondary" style="font-size:0.8rem;padding:0.4rem 0.75rem;">
+        <button id="btn-current-week" class="btn btn-secondary" style="font-size:0.8rem;padding:0.4rem 0.65rem;">
           本週
         </button>
 
@@ -147,26 +147,72 @@
         </div>
       </div>
 
+      <!-- View Switcher (Day Card / Staff Card / Full Table) -->
       <div class="controls-right-group">
         <div class="view-toggle-group">
-          <button id="view-toggle-week" class="view-toggle-btn active">週檢視 (7天)</button>
-          <button id="view-toggle-month" class="view-toggle-btn">月份模式</button>
+          <button id="view-toggle-day" class="view-toggle-btn active" title="手機推薦：直式單日排班卡片">
+            📱 單日卡片
+          </button>
+          <button id="view-toggle-staff" class="view-toggle-btn" title="依同仁個別檢視一週班表">
+            👤 人員週卡
+          </button>
+          <button id="view-toggle-week" class="view-toggle-btn" title="桌面總表：全週完整排班表格">
+            🖥️ 完整總表
+          </button>
         </div>
 
         <button id="btn-clear-week" class="btn btn-secondary" style="color:var(--accent-danger);" title="清空當週所有排班">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          清空當週
+          <span class="hide-on-mobile">清空</span>
         </button>
 
         <button id="btn-reset-demo" class="btn btn-secondary" title="重設並還原示範資料">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></svg>
-          示範範本
+          <span class="hide-on-mobile">範本</span>
         </button>
       </div>
     </section>
 
-    <!-- Main Schedule Board Container -->
-    <main class="board-container">
+    <!-- ==========================================================================
+         VIEW 1: Mobile-Friendly Day Focus Mode (單日卡片清單)
+         ========================================================================== -->
+    <section id="container-day-view" class="mobile-day-container">
+      <!-- Horizontal Date Carousel (週一至週日大膠囊切換) -->
+      <div class="date-carousel-wrapper">
+        <div class="date-carousel" id="mobile-date-carousel">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+
+      <!-- Current Selected Day Summary Banner -->
+      <div class="day-summary-banner" id="day-summary-banner">
+        <div class="day-summary-title" id="day-summary-title">
+          載入中...
+        </div>
+        <div class="day-summary-headcount" id="day-summary-headcount">
+          -
+        </div>
+      </div>
+
+      <!-- Staff Cards List for Selected Day -->
+      <div class="mobile-staff-cards" id="mobile-staff-cards-list">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         VIEW 2: Staff-Centric Weekly Cards Mode (人員週卡模式)
+         ========================================================================== -->
+    <section id="container-staff-view" class="staff-centric-container" style="display:none;">
+      <div class="staff-weekly-list" id="staff-weekly-cards-list">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         VIEW 3: Full Desktop Schedule Table Mode (桌面完整總表格模式)
+         ========================================================================== -->
+    <main id="container-table-view" class="board-container" style="display:none;">
       <!-- Board Header Toolbar / Legend -->
       <div class="board-header-toolbar">
         <div class="shifts-legend-bar" id="shifts-legend-container">
@@ -205,9 +251,64 @@
 
   </div>
 
-  <!-- Popover: Quick Shift Picker -->
+  <!-- Popover: Quick Shift Picker (Desktop Table Cell Click) -->
   <div id="shift-picker-popover" class="shift-picker-popover" style="display:none;" role="menu">
     <!-- Shift list rendered dynamically -->
+  </div>
+
+  <!-- ==========================================================================
+       Mobile Touch-Friendly Bottom Sheet (手機底部滑出式抽屜)
+       ========================================================================== -->
+  <div id="bottom-sheet-backdrop" class="bottom-sheet-backdrop" aria-hidden="true">
+    <div class="bottom-sheet-drawer" role="dialog" aria-modal="true" aria-labelledby="bottom-sheet-title">
+      <!-- Drawer Handle Bar -->
+      <div class="drawer-drag-handle"></div>
+
+      <div class="drawer-header">
+        <div>
+          <h3 id="bottom-sheet-title" class="drawer-title">指派班別</h3>
+          <p id="bottom-sheet-subtitle" class="drawer-subtitle">-</p>
+        </div>
+        <button id="btn-close-bottom-sheet" class="btn btn-icon-only">&times;</button>
+      </div>
+
+      <div class="drawer-body">
+        <div class="drawer-shifts-grid" id="drawer-shifts-list">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <div class="drawer-actions">
+          <button id="btn-sheet-set-off" class="btn btn-secondary drawer-btn-full" style="color:var(--text-secondary);">
+            🏖️ 排定例休 / 請假 (OFF)
+          </button>
+          <button id="btn-sheet-clear" class="btn btn-secondary drawer-btn-full" style="color:var(--accent-danger);">
+            ❌ 清除此格班別
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       Mobile Bottom Floating Quick Action Bar (手機底部拇指快捷列)
+       ========================================================================== -->
+  <div class="mobile-bottom-nav" id="mobile-bottom-nav">
+    <button class="mobile-nav-btn" id="m-btn-auto-schedule">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      <span>自動排班</span>
+    </button>
+    <button class="mobile-nav-btn" id="m-btn-staff">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+      <span>人員</span>
+    </button>
+    <button class="mobile-nav-btn" id="m-btn-shifts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      <span>班別</span>
+    </button>
+    <button class="mobile-nav-btn" id="m-btn-export">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>匯出</span>
+    </button>
   </div>
 
   <!-- Modal: Staff Management -->
@@ -295,7 +396,7 @@
     <div class="modal-dialog">
       <div class="modal-header">
         <h3 id="modal-shifts-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg>
           班別範本與時段設定
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-shifts">&times;</button>
