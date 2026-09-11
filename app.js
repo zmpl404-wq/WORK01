@@ -1,43 +1,50 @@
 /**
- * ShiftMaster Pro - Core Application Logic (Flex Period & Compact Mobile Table)
+ * ShiftMaster Pro - Core Application Logic
  * Modern, Dependency-free Web Scheduling System
+ * Supports: Flexible Periods, Custom Roles, English/Color Shift Toggles,
+ * Rule Violations Inspector, Advanced Auto-Schedule Constraints, and Two-Tier Excel Export.
  */
 
 (function () {
   'use strict';
 
   // --- Storage & State Keys ---
-  const STORAGE_KEY = 'shiftmaster_pro_v1';
+  const STORAGE_KEY = 'shiftmaster_pro_v2';
   const THEME_KEY = 'shiftmaster_theme';
+
+  // --- Default Roles ---
+  const DEFAULT_ROLES = ['店長', '正職', '工讀生'];
 
   // --- Default Shifts Configuration ---
   const DEFAULT_SHIFTS = [
-    { id: 'shift_morning', name: '早班', code: '早', start: '08:00', end: '16:30', hours: 8, color: '#10b981', targetStaff: 2 },
-    { id: 'shift_middle', name: '中班', code: '中', start: '12:00', end: '20:30', hours: 8, color: '#f59e0b', targetStaff: 1 },
-    { id: 'shift_evening', name: '晚班', code: '晚', start: '16:00', end: '00:30', hours: 8, color: '#8b5cf6', targetStaff: 2 },
-    { id: 'shift_night', name: '大夜班', code: '夜', start: '00:00', end: '08:30', hours: 8, color: '#3b82f6', targetStaff: 1 },
-    { id: 'shift_parttime', name: '支援短班', code: '短', start: '18:00', end: '22:00', hours: 4, color: '#06b6d4', targetStaff: 1 },
-    { id: 'shift_off', name: '例休 / 休假', code: '休', start: '-', end: '-', hours: 0, color: '#64748b', targetStaff: 0 }
+    { id: 'shift_morning', name: '早班', code: '早', enName: 'Morning', enCode: 'M', start: '08:00', end: '16:30', hours: 8, color: '#10b981', targetStaff: 2 },
+    { id: 'shift_middle', name: '中班', code: '中', enName: 'Middle', enCode: 'MID', start: '12:00', end: '20:30', hours: 8, color: '#f59e0b', targetStaff: 1 },
+    { id: 'shift_evening', name: '晚班', code: '晚', enName: 'Evening', enCode: 'E', start: '16:00', end: '00:30', hours: 8, color: '#8b5cf6', targetStaff: 2 },
+    { id: 'shift_night', name: '大夜班', code: '夜', enName: 'Night', enCode: 'N', start: '00:00', end: '08:30', hours: 8, color: '#3b82f6', targetStaff: 1 },
+    { id: 'shift_parttime', name: '支援短班', code: '短', enName: 'Part-time', enCode: 'PT', start: '18:00', end: '22:00', hours: 4, color: '#06b6d4', targetStaff: 1 },
+    { id: 'shift_off', name: '例休 / 休假', code: '休', enName: 'Off', enCode: 'OFF', start: '-', end: '-', hours: 0, color: '#64748b', targetStaff: 0 }
   ];
 
-  // --- Default Staff Roster ---
+  // --- Default Staff Roster (Using only default roles: 店長, 正職, 工讀生) ---
   const DEFAULT_STAFF = [
     { id: 'staff_1', name: '林雅婷', role: '店長', wage: 280, maxHours: 40, color: '#6366f1', offPref: '0' },
-    { id: 'staff_2', name: '張志豪', role: '正職副店', wage: 230, maxHours: 40, color: '#10b981', offPref: '1' },
-    { id: 'staff_3', name: '陳美玲', role: '正職同仁', wage: 210, maxHours: 40, color: '#ec4899', offPref: '2' },
-    { id: 'staff_4', name: '王大明', role: '正職同仁', wage: 200, maxHours: 40, color: '#f59e0b', offPref: '3' },
-    { id: 'staff_5', name: '許家豪', role: '兼職夥伴', wage: 195, maxHours: 28, color: '#06b6d4', offPref: '4' },
-    { id: 'staff_6', name: '柯怡君', role: '兼職夥伴', wage: 195, maxHours: 24, color: '#a855f7', offPref: '5' },
-    { id: 'staff_7', name: '黃冠宇', role: '計時工讀', wage: 190, maxHours: 20, color: '#14b8a6', offPref: 'none' }
+    { id: 'staff_2', name: '張志豪', role: '正職', wage: 230, maxHours: 40, color: '#10b981', offPref: '1' },
+    { id: 'staff_3', name: '陳美玲', role: '正職', wage: 210, maxHours: 40, color: '#ec4899', offPref: '2' },
+    { id: 'staff_4', name: '王大明', role: '正職', wage: 200, maxHours: 40, color: '#f59e0b', offPref: '3' },
+    { id: 'staff_5', name: '許家豪', role: '工讀生', wage: 195, maxHours: 28, color: '#06b6d4', offPref: '4' },
+    { id: 'staff_6', name: '柯怡君', role: '工讀生', wage: 195, maxHours: 24, color: '#a855f7', offPref: '5' },
+    { id: 'staff_7', name: '黃冠宇', role: '工讀生', wage: 190, maxHours: 20, color: '#14b8a6', offPref: 'none' }
   ];
 
   const DAY_NAMES_ZH = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
   const DAY_NAMES_SHORT_ZH = ['日', '一', '二', '三', '四', '五', '六'];
+  const DAY_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   // --- App State ---
   let state = {
     staff: [],
     shifts: [],
+    roles: [...DEFAULT_ROLES],
     // Keyed by `${staffId}_${dateStr}` => shiftId
     schedules: {},
     // Flexible Period State
@@ -46,6 +53,18 @@
     periodEnd: new Date(),
     selectedDayIndex: 0,
     currentView: window.innerWidth <= 768 ? 'day' : 'day',
+    // Shift Display Language: 'zh' or 'en'
+    shiftDisplayLang: 'zh',
+    // Regulatory Rules Config
+    rules: {
+      maxDailyShifts: 1,
+      maxConsecutiveDays: 6,
+      maxDailyHours: 12
+    },
+    // Auto-Schedule Advanced Rules
+    antiPairs: [], // Array of [staffIdA, staffIdB]
+    roleRestrictions: [], // Array of { role: string, shiftId: string }
+    shiftFairness: ['shift_morning', 'shift_evening', 'shift_middle'], // Shift IDs that must be balanced
     activeTarget: null
   };
 
@@ -82,6 +101,7 @@
   const elStatCost = document.getElementById('stat-total-cost');
   const elStatAlertCount = document.getElementById('stat-alert-count');
   const elStatAlertDesc = document.getElementById('stat-alert-desc');
+  const elCardAlert = document.getElementById('card-alert');
 
   // Bottom Sheet
   const elBottomSheetBackdrop = document.getElementById('bottom-sheet-backdrop');
@@ -97,6 +117,12 @@
   const elToastContainer = document.getElementById('toast-container');
   const elStaffModal = document.getElementById('modal-staff');
   const elShiftsModal = document.getElementById('modal-shifts');
+  const elRulesModal = document.getElementById('modal-rules');
+  const elAutoRulesModal = document.getElementById('modal-auto-rules');
+
+  // Language display toggle
+  const elBtnToggleShiftLang = document.getElementById('btn-toggle-shift-lang');
+  const elLabelShiftLang = document.getElementById('label-shift-lang');
 
   // ==========================================================================
   // Flexible Period Helper Functions
@@ -107,21 +133,20 @@
 
     if (mode === 'month') {
       start = new Date(base.getFullYear(), base.getMonth(), 1);
-      end = new Date(base.getFullYear(), base.getMonth() + 1, 0); // Last day of month
+      end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
     } else if (mode === '7days') {
       const day = base.getDay();
-      const diff = base.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      const diff = base.getDate() - day + (day === 0 ? -6 : 1);
       start = new Date(base.setDate(diff));
       end = new Date(start);
-      end.setDate(start.getDate() + 6); // Sunday
+      end.setDate(start.getDate() + 6);
     } else if (mode === '14days') {
       const day = base.getDay();
-      const diff = base.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      const diff = base.getDate() - day + (day === 0 ? -6 : 1);
       start = new Date(base.setDate(diff));
       end = new Date(start);
-      end.setDate(start.getDate() + 13); // 14 days
+      end.setDate(start.getDate() + 13);
     } else {
-      // Keep existing custom dates
       start = state.periodStart ? new Date(state.periodStart) : new Date();
       end = state.periodEnd ? new Date(state.periodEnd) : new Date();
     }
@@ -136,7 +161,6 @@
     const current = new Date(state.periodStart);
     const end = new Date(state.periodEnd);
 
-    // Limit maximum range to 90 days to prevent browser hanging on invalid input
     let safetyCounter = 0;
     while (current <= end && safetyCounter < 90) {
       days.push(new Date(current));
@@ -161,17 +185,14 @@
       state.periodStart.setDate(state.periodStart.getDate() + delta * 14);
       state.periodEnd.setDate(state.periodEnd.getDate() + delta * 14);
     } else {
-      // Custom shift by duration
       const daysCount = Math.round((state.periodEnd - state.periodStart) / (1000 * 60 * 60 * 24)) + 1;
       state.periodStart.setDate(state.periodStart.getDate() + delta * daysCount);
       state.periodEnd.setDate(state.periodEnd.getDate() + delta * daysCount);
     }
 
-    // Sync input values
     elInputPeriodStart.value = formatDateIso(state.periodStart);
     elInputPeriodEnd.value = formatDateIso(state.periodEnd);
 
-    // Keep selectedDayIndex valid
     const days = getPeriodDays();
     if (state.selectedDayIndex >= days.length) {
       state.selectedDayIndex = 0;
@@ -197,8 +218,14 @@
         const parsed = JSON.parse(saved);
         state.staff = parsed.staff || DEFAULT_STAFF;
         state.shifts = parsed.shifts || DEFAULT_SHIFTS;
+        state.roles = parsed.roles && parsed.roles.length > 0 ? parsed.roles : [...DEFAULT_ROLES];
         state.schedules = parsed.schedules || {};
         state.periodMode = parsed.periodMode || 'month';
+        state.shiftDisplayLang = parsed.shiftDisplayLang || 'zh';
+        state.rules = Object.assign({ maxDailyShifts: 1, maxConsecutiveDays: 6, maxDailyHours: 12 }, parsed.rules || {});
+        state.antiPairs = parsed.antiPairs || [];
+        state.roleRestrictions = parsed.roleRestrictions || [];
+        state.shiftFairness = parsed.shiftFairness || ['shift_morning', 'shift_evening', 'shift_middle'];
       } else {
         initDefaultDemoData();
       }
@@ -207,7 +234,6 @@
       initDefaultDemoData();
     }
 
-    // Initialize period dates
     const range = calculatePeriodRange(state.periodMode, new Date());
     state.periodStart = range.start;
     state.periodEnd = range.end;
@@ -217,7 +243,7 @@
     elInputPeriodEnd.value = formatDateIso(state.periodEnd);
     elCustomDateContainer.style.display = state.periodMode === 'custom' ? 'flex' : 'none';
 
-    // Default select today if in range, otherwise first day
+    updateShiftLangButtonUI();
     findAndSelectToday();
   }
 
@@ -233,8 +259,14 @@
       const payload = {
         staff: state.staff,
         shifts: state.shifts,
+        roles: state.roles,
         schedules: state.schedules,
-        periodMode: state.periodMode
+        periodMode: state.periodMode,
+        shiftDisplayLang: state.shiftDisplayLang,
+        rules: state.rules,
+        antiPairs: state.antiPairs,
+        roleRestrictions: state.roleRestrictions,
+        shiftFairness: state.shiftFairness
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -245,8 +277,14 @@
   function initDefaultDemoData() {
     state.staff = JSON.parse(JSON.stringify(DEFAULT_STAFF));
     state.shifts = JSON.parse(JSON.stringify(DEFAULT_SHIFTS));
+    state.roles = [...DEFAULT_ROLES];
     state.schedules = {};
     state.periodMode = 'month';
+    state.shiftDisplayLang = 'zh';
+    state.rules = { maxDailyShifts: 1, maxConsecutiveDays: 6, maxDailyHours: 12 };
+    state.antiPairs = [];
+    state.roleRestrictions = [];
+    state.shiftFairness = ['shift_morning', 'shift_evening', 'shift_middle'];
 
     const range = calculatePeriodRange('month', new Date());
     state.periodStart = range.start;
@@ -278,7 +316,7 @@
   }
 
   // ==========================================================================
-  // Calculations & Compliance
+  // Calculations & Compliance Violations Inspector
   // ==========================================================================
   function getStaffHoursForPeriod(staffId, periodDays) {
     let hours = 0;
@@ -295,42 +333,112 @@
     return hours;
   }
 
-  function checkStaffViolations(staffId, periodDays) {
+  /**
+   * Evaluates all violations and scheduling conflicts according to customizable rules.
+   * Returns array of: { staffId, staffName, date, type, title, desc }
+   */
+  function getAllViolations() {
+    const periodDays = getPeriodDays();
     const violations = [];
-    const staff = state.staff.find(s => s.id === staffId);
-    if (!staff) return violations;
-
-    const totalHours = getStaffHoursForPeriod(staffId, periodDays);
-    // Pro-rate maxHours based on period length (staff.maxHours is weekly / 7 days)
+    const maxConsecutive = state.rules.maxConsecutiveDays || 6;
+    const maxDailyHours = state.rules.maxDailyHours || 12;
     const periodWeeks = periodDays.length / 7;
-    const periodAllowedHours = Math.round(staff.maxHours * periodWeeks);
 
-    if (totalHours > periodAllowedHours) {
-      violations.push({
-        type: 'overtime',
-        message: `超過此週期工時基準：已排 ${totalHours}h（基準 ${periodAllowedHours}h）`
-      });
-    }
-
-    // Check consecutive work days (>= 7 continuous days)
-    let consecutiveCount = 0;
-    let maxConsecutive = 0;
-    periodDays.forEach(d => {
-      const dateStr = formatDateIso(d);
-      const shiftId = state.schedules[`${staffId}_${dateStr}`];
-      const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
-      if (shift && shift.hours > 0) {
-        consecutiveCount++;
-        if (consecutiveCount > maxConsecutive) maxConsecutive = consecutiveCount;
-      } else {
-        consecutiveCount = 0;
+    // 1. Staff-level checks (Consecutive days, Period Overtime, Daily Hours, Role Restrictions)
+    state.staff.forEach(staff => {
+      // Check Period Overtime
+      const totalHours = getStaffHoursForPeriod(staff.id, periodDays);
+      const allowedHours = Math.round(staff.maxHours * periodWeeks);
+      if (totalHours > allowedHours) {
+        violations.push({
+          staffId: staff.id,
+          staffName: staff.name,
+          date: '整期累計',
+          type: 'overtime',
+          title: '週期工時超量',
+          desc: `${staff.name} 當期工時累計已達 ${totalHours}h（允許上限為 ${allowedHours}h，每週基準 ${staff.maxHours}h）`
+        });
       }
+
+      // Check Consecutive work days
+      let consecutive = 0;
+      let streakStartDate = null;
+      periodDays.forEach(d => {
+        const dateStr = formatDateIso(d);
+        const shiftId = state.schedules[`${staff.id}_${dateStr}`];
+        const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
+
+        if (shift && shift.hours > 0) {
+          if (consecutive === 0) streakStartDate = dateStr;
+          consecutive++;
+          if (consecutive > maxConsecutive) {
+            violations.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateStr,
+              type: 'consecutive',
+              title: '連續上班超限',
+              desc: `${staff.name} 截至 ${dateStr} 已連續上班 ${consecutive} 天（自訂上限：${maxConsecutive} 天）`
+            });
+          }
+
+          // Check Daily hours limit
+          if (shift.hours > maxDailyHours) {
+            violations.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateStr,
+              type: 'daily_hours',
+              title: '單日工時超標',
+              desc: `${staff.name} 於 ${dateStr} 排定班別「${shift.name}」計薪 ${shift.hours}h（單日上限：${maxDailyHours}h）`
+            });
+          }
+
+          // Check Role Restrictions
+          const restricted = state.roleRestrictions.find(r => r.role === staff.role && r.shiftId === shift.id);
+          if (restricted) {
+            violations.push({
+              staffId: staff.id,
+              staffName: staff.name,
+              date: dateStr,
+              type: 'role_restrict',
+              title: '職位班別限制衝突',
+              desc: `${staff.name} 職能為「${staff.role}」，受排班限制不可上「${shift.name}」`
+            });
+          }
+        } else {
+          consecutive = 0;
+          streakStartDate = null;
+        }
+      });
     });
 
-    if (maxConsecutive >= 7) {
-      violations.push({
-        type: 'consecutive',
-        message: `連續出勤達 ${maxConsecutive} 天無休，有違反勞基法規定之虞`
+    // 2. Anti-Pair Conflicts (誰和誰不能同天上班)
+    if (state.antiPairs && state.antiPairs.length > 0) {
+      periodDays.forEach(d => {
+        const dateStr = formatDateIso(d);
+        state.antiPairs.forEach(pair => {
+          const [staffIdA, staffIdB] = pair;
+          const shiftAId = state.schedules[`${staffIdA}_${dateStr}`];
+          const shiftBId = state.schedules[`${staffIdB}_${dateStr}`];
+          const shiftA = shiftAId ? state.shifts.find(s => s.id === shiftAId) : null;
+          const shiftB = shiftBId ? state.shifts.find(s => s.id === shiftBId) : null;
+
+          if (shiftA && shiftA.hours > 0 && shiftB && shiftB.hours > 0) {
+            const staffA = state.staff.find(s => s.id === staffIdA);
+            const staffB = state.staff.find(s => s.id === staffIdB);
+            const nameA = staffA ? staffA.name : '員工A';
+            const nameB = staffB ? staffB.name : '員工B';
+            violations.push({
+              staffId: staffIdA,
+              staffName: `${nameA} & ${nameB}`,
+              date: dateStr,
+              type: 'anti_pair',
+              title: '搭檔互斥排班衝突',
+              desc: `${nameA} 與 ${nameB} 設有同日互斥限制，但在 ${dateStr} 同時被排入出勤班次`
+            });
+          }
+        });
       });
     }
 
@@ -352,6 +460,133 @@
   }
 
   // ==========================================================================
+  // Custom Roles Management (預設店長/正職/工讀生，可自訂增減)
+  // ==========================================================================
+  function renderRolesManagementUI() {
+    const container = document.getElementById('roles-chips-list');
+    const selectStaffRole = document.getElementById('staff-role');
+    const selectRestrictRole = document.getElementById('select-role-restrict-role');
+
+    if (!container) return;
+    container.innerHTML = '';
+
+    state.roles.forEach(role => {
+      const chip = document.createElement('div');
+      chip.className = 'role-chip';
+      chip.innerHTML = `
+        <span>${escapeHtml(role)}</span>
+        <button type="button" class="btn-del-chip" title="刪除此職位角色" data-role="${escapeHtml(role)}">&times;</button>
+      `;
+
+      chip.querySelector('.btn-del-chip').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteRole(role);
+      });
+
+      container.appendChild(chip);
+    });
+
+    // Sync select dropdowns
+    if (selectStaffRole) {
+      const currentVal = selectStaffRole.value;
+      selectStaffRole.innerHTML = '';
+      state.roles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        selectStaffRole.appendChild(opt);
+      });
+      if (state.roles.includes(currentVal)) {
+        selectStaffRole.value = currentVal;
+      }
+    }
+
+    if (selectRestrictRole) {
+      selectRestrictRole.innerHTML = '';
+      state.roles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = r;
+        selectRestrictRole.appendChild(opt);
+      });
+    }
+  }
+
+  function addCustomRole(newRoleName) {
+    const name = newRoleName.trim();
+    if (!name) {
+      showToast('請輸入有效的角色名稱', 'warning');
+      return;
+    }
+    if (state.roles.includes(name)) {
+      showToast(`角色「${name}」已存在`, 'warning');
+      return;
+    }
+    state.roles.push(name);
+    saveState();
+    renderRolesManagementUI();
+    showToast(`✨ 已成功新增職能角色：${name}`, 'success');
+  }
+
+  function deleteRole(roleName) {
+    const inUseCount = state.staff.filter(s => s.role === roleName).length;
+    let msg = `確定要刪除「${roleName}」角色嗎？`;
+    if (inUseCount > 0) {
+      msg = `目前有 ${inUseCount} 位同仁設定為「${roleName}」，刪除後同仁仍保留原職位名稱。確定要移除此選項嗎？`;
+    }
+    if (confirm(msg)) {
+      state.roles = state.roles.filter(r => r !== roleName);
+      // Also clean up any role restrictions
+      state.roleRestrictions = state.roleRestrictions.filter(rr => rr.role !== roleName);
+      saveState();
+      renderRolesManagementUI();
+      renderAutoRulesModalUI();
+      showToast(`已移除角色：${roleName}`, 'info');
+    }
+  }
+
+  // ==========================================================================
+  // Shift Display Language Toggle (中英切換)
+  // ==========================================================================
+  function toggleShiftDisplayLang() {
+    state.shiftDisplayLang = state.shiftDisplayLang === 'zh' ? 'en' : 'zh';
+    saveState();
+    updateShiftLangButtonUI();
+    renderAll();
+    const label = state.shiftDisplayLang === 'zh' ? '繁體中文' : 'English (英文代碼/單字)';
+    showToast(`🔤 班別顯示模式切換為：${label}`, 'info');
+  }
+
+  function updateShiftLangButtonUI() {
+    if (!elLabelShiftLang) return;
+    if (state.shiftDisplayLang === 'en') {
+      elLabelShiftLang.textContent = 'EN 英文顯示';
+      elBtnToggleShiftLang.classList.add('btn-primary');
+      elBtnToggleShiftLang.classList.remove('btn-secondary');
+    } else {
+      elLabelShiftLang.textContent = '中文顯示';
+      elBtnToggleShiftLang.classList.remove('btn-primary');
+      elBtnToggleShiftLang.classList.add('btn-secondary');
+    }
+  }
+
+  function getShiftDisplayTitle(shift) {
+    if (!shift) return '';
+    if (state.shiftDisplayLang === 'en') {
+      return shift.enName ? `${shift.enName} (${shift.enCode || shift.code})` : `${shift.name} (${shift.code})`;
+    }
+    return `${shift.name} (${shift.code})`;
+  }
+
+  function getShiftDisplayShort(shift) {
+    if (!shift) return '';
+    if (state.shiftDisplayLang === 'en') {
+      return shift.enCode || shift.code || shift.name;
+    }
+    return shift.code || shift.name;
+  }
+
+  // ==========================================================================
   // Master Rendering Router
   // ==========================================================================
   function renderAll() {
@@ -361,6 +596,7 @@
     renderLegend();
     renderStaffModalList();
     renderShiftsModalList();
+    renderRolesManagementUI();
   }
 
   function renderPeriodBadge() {
@@ -396,14 +632,13 @@
   // ==========================================================================
   function renderDateCarousel() {
     const days = getPeriodDays();
-    const todayIso = formatDateIso(new Date());
     elDateCarousel.innerHTML = '';
 
     days.forEach((d, idx) => {
       const dateIso = formatDateIso(d);
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const isSelected = idx === state.selectedDayIndex;
-      const dayName = DAY_NAMES_ZH[d.getDay()];
+      const dayName = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_ZH[d.getDay()];
       const dayDate = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
       const count = getDailyHeadcount(dateIso);
 
@@ -426,7 +661,6 @@
       elDateCarousel.appendChild(chip);
     });
 
-    // Auto-scroll active chip into view smoothly
     const activeChip = elDateCarousel.querySelector('.day-chip.active');
     if (activeChip) {
       activeChip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -440,7 +674,7 @@
     if (state.selectedDayIndex >= days.length) state.selectedDayIndex = 0;
     const selectedDate = days[state.selectedDayIndex];
     const dateIso = formatDateIso(selectedDate);
-    const dayName = DAY_NAMES_ZH[selectedDate.getDay()];
+    const dayName = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[selectedDate.getDay()] : DAY_NAMES_ZH[selectedDate.getDay()];
     const count = getDailyHeadcount(dateIso);
 
     elDaySummaryTitle.innerHTML = `
@@ -460,11 +694,13 @@
     if (state.staff.length === 0) {
       elMobileStaffCards.innerHTML = `
         <div style="text-align:center;padding:2.5rem;color:var(--text-muted);">
-          尚未建立員工名單，請點擊下方「人員」新增！
+          尚未建立員工名單，請點擊上方「人員管理」新增！
         </div>
       `;
       return;
     }
+
+    const allViolations = getAllViolations();
 
     state.staff.forEach(staff => {
       const card = document.createElement('div');
@@ -475,8 +711,8 @@
       const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
 
       const periodHours = getStaffHoursForPeriod(staff.id, days);
-      const violations = checkStaffViolations(staff.id, days);
-      const hasViolation = violations.length > 0;
+      const staffViolations = allViolations.filter(v => v.staffId === staff.id || (v.staffName && v.staffName.includes(staff.name)));
+      const hasViolation = staffViolations.length > 0;
 
       const topRow = document.createElement('div');
       topRow.className = 'mobile-card-top-row';
@@ -494,23 +730,26 @@
           </div>
         </div>
         <div>
-          ${hasViolation ? `<span class="mobile-alert-tag" title="${violations.map(v => v.message).join('\n')}">⚠️ 警示</span>` : ''}
+          ${hasViolation ? `<span class="mobile-alert-tag" title="${staffViolations.map(v => v.desc).join('\n')}">⚠️ 警示 (${staffViolations.length})</span>` : ''}
         </div>
       `;
       card.appendChild(topRow);
 
       const shiftBtn = document.createElement('button');
+      shiftBtn.type = 'button';
       shiftBtn.className = `mobile-shift-action-btn ${shift ? 'has-shift' : 'is-empty'}`;
 
       if (shift) {
         shiftBtn.style.backgroundColor = shift.color;
+        const codeText = getShiftDisplayShort(shift);
+        const nameText = state.shiftDisplayLang === 'en' ? (shift.enName || shift.name) : shift.name;
         shiftBtn.innerHTML = `
           <div class="mobile-shift-btn-left">
-            <span class="mobile-shift-badge-code">${shift.code}</span>
-            <span class="mobile-shift-btn-name">${shift.name}</span>
+            <span class="mobile-shift-badge-code">${codeText}</span>
+            <span class="mobile-shift-btn-name">${nameText}</span>
           </div>
           <div class="mobile-shift-btn-right">
-            <span>${shift.start === '-' ? '休息' : shift.start + '-' + shift.end}</span>
+            <span>${shift.start === '-' ? (state.shiftDisplayLang === 'en' ? 'Off' : '休息') : shift.start + '-' + shift.end}</span>
             <span>(${shift.hours}h)</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </div>
@@ -581,7 +820,7 @@
 
       days.forEach(d => {
         const dateIso = formatDateIso(d);
-        const dayName = DAY_NAMES_ZH[d.getDay()];
+        const dayName = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_ZH[d.getDay()];
         const key = `${staff.id}_${dateIso}`;
         const shiftId = state.schedules[key];
         const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
@@ -591,9 +830,10 @@
         if (shift) {
           pill.style.backgroundColor = shift.color;
           pill.style.borderColor = 'transparent';
+          const codeText = getShiftDisplayShort(shift);
           pill.innerHTML = `
-            <span class="staff-day-pill-name" style="color:rgba(255,255,255,0.8);">${dayName.replace('週', '')}</span>
-            <span class="staff-day-pill-code" style="color:#ffffff;">${shift.code}</span>
+            <span class="staff-day-pill-name" style="color:rgba(255,255,255,0.85);">${dayName.replace('週', '')}</span>
+            <span class="staff-day-pill-code" style="color:#ffffff;">${codeText}</span>
           `;
         } else {
           pill.innerHTML = `
@@ -615,19 +855,19 @@
   }
 
   // ==========================================================================
-  // VIEW 3: Compact Schedule Table Mode (手機極致微縮排版)
+  // VIEW 3: Compact Schedule Table Mode (防滑動覆蓋姓名、支援中英班別與顏色)
   // ==========================================================================
   function renderTable() {
     const periodDays = getPeriodDays();
     const todayIso = formatDateIso(new Date());
 
-    // 1. Table Header
+    // 1. Table Header (th.col-staff is sticky left:0 with z-index:40)
     elTableHeader.innerHTML = `<th class="col-staff">姓名</th>`;
     periodDays.forEach(d => {
       const dateIso = formatDateIso(d);
       const isToday = dateIso === todayIso;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      const dayNameShort = DAY_NAMES_SHORT_ZH[d.getDay()];
+      const dayNameShort = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_SHORT_ZH[d.getDay()];
       const dayFormatted = `${d.getDate()}`;
 
       const th = document.createElement('th');
@@ -646,6 +886,8 @@
 
     // 2. Table Body (Staff Rows)
     elTableBody.innerHTML = '';
+    const allViolations = getAllViolations();
+
     state.staff.forEach(staff => {
       const tr = document.createElement('tr');
 
@@ -658,12 +900,12 @@
       `;
       tr.appendChild(tdStaff);
 
-      const violations = checkStaffViolations(staff.id, periodDays);
-      const hasViolation = violations.length > 0;
+      const staffViolations = allViolations.filter(v => v.staffId === staff.id);
+      const hasViolation = staffViolations.length > 0;
 
       periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
-        const dayName = DAY_NAMES_ZH[d.getDay()];
+        const dayName = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_ZH[d.getDay()];
         const cellKey = `${staff.id}_${dateIso}`;
         const shiftId = state.schedules[cellKey];
         const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
@@ -673,10 +915,12 @@
         slot.className = 'shift-slot';
 
         if (shift) {
+          const shortCode = getShiftDisplayShort(shift);
+          const fullTitle = getShiftDisplayTitle(shift);
           slot.innerHTML = `
-            <div class="shift-pill" style="background:${shift.color};" title="${shift.name} ${shift.start}~${shift.end}">
+            <div class="shift-pill" style="background:${shift.color};" title="${escapeHtml(fullTitle)} ${shift.start}~${shift.end}">
               <div class="shift-pill-title">
-                <span>${shift.code}</span>
+                <span>${shortCode}</span>
               </div>
             </div>
           `;
@@ -690,7 +934,6 @@
           `;
         }
 
-        // On mobile: tap opens Bottom Sheet! On desktop: popover
         slot.addEventListener('click', (e) => {
           e.stopPropagation();
           if (window.innerWidth <= 768) {
@@ -717,7 +960,7 @@
       elTableBody.appendChild(tr);
     });
 
-    // 3. Table Footer (Daily headcount totals)
+    // 3. Table Footer (Daily headcount totals, with sticky staff column)
     elTableFooter.innerHTML = `<th class="col-staff">出勤</th>`;
     periodDays.forEach(d => {
       const dateIso = formatDateIso(d);
@@ -747,9 +990,13 @@
       chip.style.color = shift.color;
       chip.style.border = `1px solid ${shift.color}40`;
 
+      const titleText = state.shiftDisplayLang === 'en'
+        ? `${shift.enName || shift.name} (${shift.enCode || shift.code})`
+        : `${shift.name} (${shift.code}${shift.enCode ? ' / ' + shift.enCode : ''})`;
+
       chip.innerHTML = `
         <span class="shift-legend-color-dot" style="background:${shift.color};"></span>
-        <span>${shift.name} (${shift.code})</span>
+        <span>${titleText}</span>
       `;
       elLegend.appendChild(chip);
     });
@@ -761,8 +1008,6 @@
     let totalHours = 0;
     let totalShifts = 0;
     let totalCost = 0;
-    let alertCount = 0;
-    const alertDetails = [];
 
     state.staff.forEach(staff => {
       const hours = getStaffHoursForPeriod(staff.id, periodDays);
@@ -779,13 +1024,10 @@
           }
         }
       });
-
-      const violations = checkStaffViolations(staff.id, periodDays);
-      if (violations.length > 0) {
-        alertCount += violations.length;
-        violations.forEach(v => alertDetails.push(`${staff.name}: ${v.message}`));
-      }
     });
+
+    const violations = getAllViolations();
+    const alertCount = violations.length;
 
     const avgHours = state.staff.length > 0 ? (totalHours / state.staff.length).toFixed(1) : 0;
     elStatHours.innerHTML = `${totalHours} <span style="font-size:0.85rem;font-weight:500;">小時</span>`;
@@ -798,112 +1040,228 @@
     elStatCost.textContent = `NT$ ${totalCost.toLocaleString()}`;
 
     if (alertCount > 0) {
-      elStatAlertCount.innerHTML = `<span style="color:var(--accent-danger);">${alertCount}</span> <span style="font-size:0.85rem;font-weight:500;">項異常</span>`;
-      elStatAlertDesc.textContent = alertDetails[0] || '工時超時或連續出勤警告';
+      elStatAlertCount.innerHTML = `<span style="color:var(--accent-danger);">${alertCount}</span> <span style="font-size:0.85rem;font-weight:500;">項警示</span>`;
+      elStatAlertDesc.textContent = violations[0].desc || '點擊檢視異常明細與修改法規規則';
     } else {
       elStatAlertCount.innerHTML = `<span style="color:var(--accent-success);">0</span> <span style="font-size:0.85rem;font-weight:500;">項異常</span>`;
-      elStatAlertDesc.textContent = '工時合規・無排班衝突';
+      elStatAlertDesc.textContent = '工時合規・點擊可自訂修改排班法規規則';
     }
   }
 
   // ==========================================================================
-  // Mobile Bottom Sheet
+  // Violations & Custom Rules Modal
   // ==========================================================================
-  function openBottomSheet(staff, dateStr, dayName) {
-    state.activeTarget = { staffId: staff.id, dateStr };
+  function openRulesModal(defaultTab = 'violations') {
+    elRulesModal.classList.add('open');
+    switchRulesTab(defaultTab);
+    renderViolationsList();
+    populateRulesForm();
+  }
 
-    elBottomSheetTitle.textContent = `指派班別：${staff.name}`;
-    elBottomSheetSubtitle.textContent = `日期：${dateStr} (${dayName}) ・ 職稱：${staff.role}`;
+  function switchRulesTab(tab) {
+    const btnViolations = document.getElementById('tab-btn-violations');
+    const btnSettings = document.getElementById('tab-btn-rules-settings');
+    const paneViolations = document.getElementById('tab-content-violations');
+    const paneSettings = document.getElementById('tab-content-rules-settings');
 
-    elDrawerShiftsList.innerHTML = '';
+    if (tab === 'violations') {
+      btnViolations.classList.add('active');
+      btnSettings.classList.remove('active');
+      paneViolations.style.display = 'block';
+      paneSettings.style.display = 'none';
+      renderViolationsList();
+    } else {
+      btnViolations.classList.remove('active');
+      btnSettings.classList.add('active');
+      paneViolations.style.display = 'none';
+      paneSettings.style.display = 'block';
+      populateRulesForm();
+    }
+  }
+
+  function renderViolationsList() {
+    const container = document.getElementById('violations-list-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const violations = getAllViolations();
+
+    if (violations.length === 0) {
+      container.innerHTML = `
+        <div class="violation-empty-state">
+          <svg class="violation-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <div style="font-weight:700;font-size:1.05rem;color:var(--text-primary);margin-top:0.4rem;">
+            目前排班完全合規！
+          </div>
+          <div style="font-size:0.825rem;">
+            無連續出勤過長、無超時工時、無搭檔互斥與職位班別衝突。
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    violations.forEach(v => {
+      const item = document.createElement('div');
+      item.className = 'violation-item';
+      item.innerHTML = `
+        <div class="violation-left">
+          <div class="violation-header-row">
+            <span class="violation-staff-badge">${escapeHtml(v.staffName)}</span>
+            <span class="violation-date">📅 ${escapeHtml(v.date)}</span>
+            <span class="violation-tag">🚨 ${escapeHtml(v.title)}</span>
+          </div>
+          <div class="violation-desc">${escapeHtml(v.desc)}</div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  function populateRulesForm() {
+    document.getElementById('rule-max-shifts-day').value = state.rules.maxDailyShifts || 1;
+    document.getElementById('rule-max-consecutive-days').value = state.rules.maxConsecutiveDays || 6;
+    document.getElementById('rule-max-daily-hours').value = state.rules.maxDailyHours || 12;
+  }
+
+  // ==========================================================================
+  // Auto-Schedule Advanced Rules Modal (互斥、職位限制、平均公平分配開關)
+  // ==========================================================================
+  function openAutoRulesModal() {
+    elAutoRulesModal.classList.add('open');
+    renderAutoRulesModalUI();
+  }
+
+  function renderAutoRulesModalUI() {
+    // 1. Anti-Pairs dropdowns and list
+    const selA = document.getElementById('select-antipair-a');
+    const selB = document.getElementById('select-antipair-b');
+    const listAnti = document.getElementById('antipair-list-container');
+
+    selA.innerHTML = '';
+    selB.innerHTML = '';
+    state.staff.forEach(s => {
+      const optA = document.createElement('option');
+      optA.value = s.id;
+      optA.textContent = `${s.name} (${s.role})`;
+      selA.appendChild(optA);
+
+      const optB = document.createElement('option');
+      optB.value = s.id;
+      optB.textContent = `${s.name} (${s.role})`;
+      selB.appendChild(optB);
+    });
+
+    listAnti.innerHTML = '';
+    if (state.antiPairs.length === 0) {
+      listAnti.innerHTML = '<span style="font-size:0.75rem;color:var(--text-muted);">尚未設定互斥人員（所有人皆可同天排班）</span>';
+    } else {
+      state.antiPairs.forEach((pair, idx) => {
+        const staffA = state.staff.find(s => s.id === pair[0]);
+        const staffB = state.staff.find(s => s.id === pair[1]);
+        const nameA = staffA ? staffA.name : '已刪除員工';
+        const nameB = staffB ? staffB.name : '已刪除員工';
+
+        const tag = document.createElement('div');
+        tag.className = 'rule-tag-item';
+        tag.innerHTML = `
+          <span>🚫 <b>${escapeHtml(nameA)}</b> 與 <b>${escapeHtml(nameB)}</b> 不能同天</span>
+          <button type="button" class="btn-del-rule" title="移除此互斥規則">&times;</button>
+        `;
+        tag.querySelector('.btn-del-rule').addEventListener('click', () => {
+          state.antiPairs.splice(idx, 1);
+          saveState();
+          renderAutoRulesModalUI();
+          showToast('已移除互斥規則', 'info');
+        });
+        listAnti.appendChild(tag);
+      });
+    }
+
+    // 2. Role Shift Restrictions dropdowns and list
+    const selRole = document.getElementById('select-role-restrict-role');
+    const selShift = document.getElementById('select-role-restrict-shift');
+    const listRoleRestrict = document.getElementById('role-restrict-list-container');
+
+    selRole.innerHTML = '';
+    state.roles.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r;
+      opt.textContent = r;
+      selRole.appendChild(opt);
+    });
+
+    selShift.innerHTML = '';
     const workShifts = state.shifts.filter(s => s.id !== 'shift_off');
+    workShifts.forEach(sh => {
+      const opt = document.createElement('option');
+      opt.value = sh.id;
+      opt.textContent = `${sh.name} (${sh.code})`;
+      selShift.appendChild(opt);
+    });
+
+    listRoleRestrict.innerHTML = '';
+    if (state.roleRestrictions.length === 0) {
+      listRoleRestrict.innerHTML = '<span style="font-size:0.75rem;color:var(--text-muted);">尚未設定職能限制（所有職位皆可排任意班別）</span>';
+    } else {
+      state.roleRestrictions.forEach((item, idx) => {
+        const shift = state.shifts.find(s => s.id === item.shiftId);
+        const shiftName = shift ? shift.name : '已刪除班別';
+
+        const tag = document.createElement('div');
+        tag.className = 'rule-tag-item';
+        tag.innerHTML = `
+          <span>🔒 職位 <b>${escapeHtml(item.role)}</b> 不能上 <b>${escapeHtml(shiftName)}</b></span>
+          <button type="button" class="btn-del-rule" title="移除此限制">&times;</button>
+        `;
+        tag.querySelector('.btn-del-rule').addEventListener('click', () => {
+          state.roleRestrictions.splice(idx, 1);
+          saveState();
+          renderAutoRulesModalUI();
+          showToast('已移除職位排班限制', 'info');
+        });
+        listRoleRestrict.appendChild(tag);
+      });
+    }
+
+    // 3. Shift Fairness Toggles Checkbox Grid
+    const fairnessContainer = document.getElementById('shift-fairness-toggles-container');
+    fairnessContainer.innerHTML = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'checkbox-grid';
 
     workShifts.forEach(shift => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'drawer-shift-item';
-      item.style.backgroundColor = shift.color;
-      item.innerHTML = `
-        <div class="drawer-shift-title">
-          <span style="padding:0.1rem 0.45rem;background:rgba(0,0,0,0.25);border-radius:4px;font-size:0.85rem;">${shift.code}</span>
-          <span>${shift.name}</span>
-        </div>
-        <div class="drawer-shift-time">
-          ${shift.start}-${shift.end} (${shift.hours}h)
-        </div>
+      const label = document.createElement('label');
+      label.className = 'checkbox-label';
+      const isChecked = state.shiftFairness.includes(shift.id);
+
+      label.innerHTML = `
+        <input type="checkbox" data-shift-id="${shift.id}" ${isChecked ? 'checked' : ''}>
+        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${shift.color};"></span>
+        <span>${escapeHtml(shift.name)} (${shift.code})</span>
       `;
 
-      item.addEventListener('click', () => {
-        assignShift(staff.id, dateStr, shift.id);
-        closeBottomSheet();
+      label.querySelector('input').addEventListener('change', (e) => {
+        if (e.target.checked) {
+          if (!state.shiftFairness.includes(shift.id)) state.shiftFairness.push(shift.id);
+        } else {
+          state.shiftFairness = state.shiftFairness.filter(id => id !== shift.id);
+        }
+        saveState();
       });
 
-      elDrawerShiftsList.appendChild(item);
+      grid.appendChild(label);
     });
 
-    elBottomSheetBackdrop.classList.add('open');
-  }
-
-  function closeBottomSheet() {
-    elBottomSheetBackdrop.classList.remove('open');
-    state.activeTarget = null;
-  }
-
-  function openShiftPicker(staffId, dateStr, anchorEl) {
-    elShiftPicker.innerHTML = '';
-
-    state.shifts.forEach(shift => {
-      const item = document.createElement('div');
-      item.className = 'shift-picker-item';
-      item.innerHTML = `
-        <span style="display:flex;align-items:center;gap:0.4rem;">
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shift.color};"></span>
-          <span>${shift.name}</span>
-        </span>
-        <span style="font-size:0.75rem;opacity:0.7;">${shift.hours > 0 ? shift.hours + 'h' : '休'}</span>
-      `;
-      item.addEventListener('click', () => {
-        assignShift(staffId, dateStr, shift.id);
-        closeShiftPicker();
-      });
-      elShiftPicker.appendChild(item);
-    });
-
-    const removeItem = document.createElement('div');
-    removeItem.className = 'shift-picker-item remove-item';
-    removeItem.innerHTML = `<span>❌ 清除此格班別</span>`;
-    removeItem.addEventListener('click', () => {
-      assignShift(staffId, dateStr, null);
-      closeShiftPicker();
-    });
-    elShiftPicker.appendChild(removeItem);
-
-    const rect = anchorEl.getBoundingClientRect();
-    elShiftPicker.style.display = 'flex';
-    elShiftPicker.style.top = `${window.scrollY + rect.bottom + 4}px`;
-    elShiftPicker.style.left = `${window.scrollX + rect.left}px`;
-  }
-
-  function closeShiftPicker() {
-    elShiftPicker.style.display = 'none';
-  }
-
-  function assignShift(staffId, dateStr, shiftId) {
-    const key = `${staffId}_${dateStr}`;
-    if (shiftId === null) {
-      delete state.schedules[key];
-      showToast('已清除排班', 'success');
-    } else {
-      state.schedules[key] = shiftId;
-      const shift = state.shifts.find(s => s.id === shiftId);
-      showToast(`已排定：${shift ? shift.name : ''}`, 'success');
-    }
-    saveState();
-    renderAll();
+    fairnessContainer.appendChild(grid);
   }
 
   // ==========================================================================
-  // Smart Auto-Scheduler (Supports Arbitrary Period Length)
+  // Smart Auto-Scheduler (With Advanced Constraints & Fairness)
   // ==========================================================================
   function runAutoScheduler() {
     if (state.staff.length === 0) {
@@ -912,61 +1270,94 @@
     }
 
     const periodDays = getPeriodDays();
-    const staffHoursTracker = {};
-    const staffConsecutiveWork = {};
-    state.staff.forEach(s => {
-      staffHoursTracker[s.id] = 0;
-      staffConsecutiveWork[s.id] = 0;
-    });
-
     const workShifts = state.shifts.filter(s => s.id !== 'shift_off' && s.hours > 0);
     if (workShifts.length === 0) {
       showToast('請先建立可出勤之班別範本！', 'warning');
       return;
     }
 
+    const maxConsecutive = state.rules.maxConsecutiveDays || 6;
     const periodWeeks = periodDays.length / 7;
+
+    const staffHoursTracker = {};
+    const staffConsecutiveWork = {};
+    const staffShiftCounts = {}; // { [staffId]: { [shiftId]: count } } for fairness
+
+    state.staff.forEach(s => {
+      staffHoursTracker[s.id] = 0;
+      staffConsecutiveWork[s.id] = 0;
+      staffShiftCounts[s.id] = {};
+      workShifts.forEach(sh => {
+        staffShiftCounts[s.id][sh.id] = 0;
+      });
+    });
 
     periodDays.forEach(d => {
       const dateStr = formatDateIso(d);
       const dayOfWeek = String(d.getDay());
+      const dailyWorkingStaffIds = new Set();
 
-      const availableStaff = state.staff.filter(s => {
-        if (s.offPref === dayOfWeek) return false;
-        const allowed = Math.round(s.maxHours * periodWeeks);
-        if (staffHoursTracker[s.id] >= allowed) return false;
-        if (staffConsecutiveWork[s.id] >= 6) return false;
-        return true;
-      });
-
-      availableStaff.sort((a, b) => {
-        const allowedA = Math.round(a.maxHours * periodWeeks);
-        const allowedB = Math.round(b.maxHours * periodWeeks);
-        const remA = allowedA - staffHoursTracker[a.id];
-        const remB = allowedB - staffHoursTracker[b.id];
-        return remB - remA;
-      });
-
-      let staffPointer = 0;
       workShifts.forEach(shift => {
         const need = shift.targetStaff || 1;
+        const isFairnessShift = state.shiftFairness.includes(shift.id);
+
         for (let i = 0; i < need; i++) {
-          if (staffPointer < availableStaff.length) {
-            const chosenStaff = availableStaff[staffPointer];
-            const allowed = Math.round(chosenStaff.maxHours * periodWeeks);
-            if (staffHoursTracker[chosenStaff.id] + shift.hours <= allowed + 4) {
-              state.schedules[`${chosenStaff.id}_${dateStr}`] = shift.id;
-              staffHoursTracker[chosenStaff.id] += shift.hours;
-              staffConsecutiveWork[chosenStaff.id] += 1;
-              staffPointer++;
-            }
+          const candidateStaff = state.staff.filter(staff => {
+            // Already scheduled today
+            if (dailyWorkingStaffIds.has(staff.id)) return false;
+
+            // Off day preference
+            if (staff.offPref === dayOfWeek) return false;
+
+            // Maximum consecutive work days limit
+            if (staffConsecutiveWork[staff.id] >= maxConsecutive) return false;
+
+            // Period total hours limit
+            const allowed = Math.round(staff.maxHours * periodWeeks);
+            if (staffHoursTracker[staff.id] + shift.hours > allowed + 4) return false;
+
+            // Role restriction check
+            const hasRestriction = state.roleRestrictions.some(r => r.role === staff.role && r.shiftId === shift.id);
+            if (hasRestriction) return false;
+
+            // Anti-pair check
+            const violatesAntiPair = state.antiPairs.some(pair => {
+              const otherId = pair[0] === staff.id ? pair[1] : (pair[1] === staff.id ? pair[0] : null);
+              return otherId && dailyWorkingStaffIds.has(otherId);
+            });
+            if (violatesAntiPair) return false;
+
+            return true;
+          });
+
+          if (candidateStaff.length > 0) {
+            candidateStaff.sort((a, b) => {
+              if (isFairnessShift) {
+                const countA = staffShiftCounts[a.id][shift.id] || 0;
+                const countB = staffShiftCounts[b.id][shift.id] || 0;
+                if (countA !== countB) return countA - countB;
+              }
+              const allowedA = Math.round(a.maxHours * periodWeeks);
+              const allowedB = Math.round(b.maxHours * periodWeeks);
+              const remA = allowedA - staffHoursTracker[a.id];
+              const remB = allowedB - staffHoursTracker[b.id];
+              return remB - remA;
+            });
+
+            const chosen = candidateStaff[0];
+            state.schedules[`${chosen.id}_${dateStr}`] = shift.id;
+            staffHoursTracker[chosen.id] += shift.hours;
+            staffConsecutiveWork[chosen.id] += 1;
+            staffShiftCounts[chosen.id][shift.id] = (staffShiftCounts[chosen.id][shift.id] || 0) + 1;
+            dailyWorkingStaffIds.add(chosen.id);
           }
         }
       });
 
+      // Staff not scheduled today get assigned off
       state.staff.forEach(s => {
         const key = `${s.id}_${dateStr}`;
-        if (!state.schedules[key]) {
+        if (!state.schedules[key] || !dailyWorkingStaffIds.has(s.id)) {
           state.schedules[key] = 'shift_off';
           staffConsecutiveWork[s.id] = 0;
         }
@@ -975,7 +1366,7 @@
 
     saveState();
     renderAll();
-    showToast(`✨ 智慧排班完成！已依據 ${periodDays.length} 天週期均衡分配`, 'success');
+    showToast(`✨ 智慧排班完成！已依據法規、互斥與公平原則排定 ${periodDays.length} 天`, 'success');
   }
 
   // ==========================================================================
@@ -1024,6 +1415,7 @@
       item.querySelector('.btn-delete-staff').addEventListener('click', () => {
         if (confirm(`確定要移除「${staff.name}」嗎？這將一併清除該同仁的排班紀錄。`)) {
           state.staff = state.staff.filter(s => s.id !== staff.id);
+          state.antiPairs = state.antiPairs.filter(pair => pair[0] !== staff.id && pair[1] !== staff.id);
           Object.keys(state.schedules).forEach(k => {
             if (k.startsWith(`${staff.id}_`)) delete state.schedules[k];
           });
@@ -1038,7 +1430,7 @@
   }
 
   // ==========================================================================
-  // Shift Modal Management
+  // Shift Modal Management (With English Names and Colors)
   // ==========================================================================
   function renderShiftsModalList() {
     const listEl = document.getElementById('shifts-entity-list');
@@ -1049,12 +1441,14 @@
       const item = document.createElement('div');
       item.className = 'entity-item';
 
+      const enText = shift.enName ? ` (${shift.enName} / ${shift.enCode || shift.code})` : '';
+
       item.innerHTML = `
         <div style="display:flex;align-items:center;gap:0.75rem;">
-          <div style="width:14px;height:14px;border-radius:4px;background:${shift.color};"></div>
+          <div style="width:16px;height:16px;border-radius:4px;background:${shift.color};box-shadow:0 0 4px ${shift.color}80;"></div>
           <div>
             <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary);">
-              ${escapeHtml(shift.name)} (${shift.code})
+              ${escapeHtml(shift.name)} [${shift.code}]<span style="font-size:0.8rem;color:var(--text-muted);font-weight:normal;">${escapeHtml(enText)}</span>
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted);">
               ${shift.start} ~ ${shift.end} ・ 計薪 ${shift.hours}h ・ 目標 ${shift.targetStaff} 人
@@ -1075,6 +1469,8 @@
         delBtn.addEventListener('click', () => {
           if (confirm(`確定要刪除班別「${shift.name}」嗎？`)) {
             state.shifts = state.shifts.filter(s => s.id !== shift.id);
+            state.shiftFairness = state.shiftFairness.filter(id => id !== shift.id);
+            state.roleRestrictions = state.roleRestrictions.filter(rr => rr.shiftId !== shift.id);
             saveState();
             renderAll();
             showToast(`已刪除班別：${shift.name}`, 'warning');
@@ -1087,57 +1483,200 @@
   }
 
   // ==========================================================================
-  // CSV Export Engine
+  // Custom Two-Tier EXCEL Exporter (B2~P2: 1~15, B3~P3: 星期, A4~A?: 員工姓名)
+  // 空一行後再從 B?~P? 輸出 16~月底號
   // ==========================================================================
-  function exportScheduleToCSV() {
-    const periodDays = getPeriodDays();
-    let csv = '\uFEFF';
+  function exportCustomExcel() {
+    const year = state.periodStart.getFullYear();
+    const month = state.periodStart.getMonth(); // 0-indexed
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    const headers = ['員工姓名', '職稱', '時薪', '每週工時基準'];
-    periodDays.forEach(d => {
-      headers.push(`${DAY_NAMES_ZH[d.getDay()]} (${d.getMonth() + 1}/${d.getDate()})`);
-    });
-    headers.push('當期總工時', '預估薪資支出');
-    csv += headers.map(h => `"${h}"`).join(',') + '\r\n';
+    if (state.staff.length === 0) {
+      showToast('名冊內無員工資料，無法匯出排班表！', 'warning');
+      return;
+    }
 
+    let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <!--[if gte mso 9]>
+  <xml>
+    <x:ExcelWorkbook>
+      <x:ExcelWorksheets>
+        <x:ExcelWorksheet>
+          <x:Name>${year}年${month + 1}月排班表</x:Name>
+          <x:WorksheetOptions>
+            <x:DisplayGridlines/>
+          </x:WorksheetOptions>
+        </x:ExcelWorksheet>
+      </x:ExcelWorksheets>
+    </x:ExcelWorkbook>
+  </xml>
+  <![endif]-->
+  <style>
+    body { font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 0.5pt solid #888888; text-align: center; vertical-align: middle; padding: 6px 4px; font-size: 11pt; }
+    .title-row { background-color: #312e81; color: #ffffff; font-weight: bold; font-size: 14pt; height: 36px; }
+    .header-date { background-color: #4338ca; color: #ffffff; font-weight: bold; }
+    .header-week { background-color: #e0e7ff; color: #1e1b4b; font-weight: bold; }
+    .staff-name-col { background-color: #f8fafc; font-weight: bold; text-align: left; padding-left: 12px; }
+    .weekend { color: #dc2626; font-weight: bold; }
+    .shift-cell { font-size: 10.5pt; font-weight: 600; }
+    .empty-separator { border: none; height: 26px; background-color: #ffffff; }
+  </style>
+</head>
+<body>
+<table>`;
+
+    // ========================================================================
+    // Section 1: Days 1 to 15 (B2~P2 are 1~15, B3~P3 are Weekdays, A4~A? are Staff)
+    // ========================================================================
+    // Row 1: Title
+    html += `<tr><th colspan="16" class="title-row">${year} 年 ${month + 1} 月份 員工排班總表（上半月：1 ~ 15 號）</th></tr>`;
+
+    // Row 2: Date Row (A2 = "員工 / 日期", B2~P2 = 1號 ~ 15號)
+    html += `<tr><th class="header-date">員工 \\ 日期</th>`;
+    for (let day = 1; day <= 15; day++) {
+      html += `<th class="header-date">${day}號</th>`;
+    }
+    html += `</tr>`;
+
+    // Row 3: Weekday Row (A3 = "星期", B3~P3 = 星期日~六)
+    html += `<tr><th class="header-week">星期</th>`;
+    for (let day = 1; day <= 15; day++) {
+      const d = new Date(year, month, day);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const weekName = DAY_NAMES_ZH[d.getDay()];
+      html += `<th class="header-week ${isWeekend ? 'weekend' : ''}">${weekName}</th>`;
+    }
+    html += `</tr>`;
+
+    // Rows 4 ~ (3 + staffCount): Staff Shift Rows
     state.staff.forEach(staff => {
-      const hours = getStaffHoursForPeriod(staff.id, periodDays);
-      const cost = hours * (staff.wage || 0);
-
-      const row = [
-        staff.name,
-        staff.role,
-        `NT$ ${staff.wage}`,
-        `${staff.maxHours} 小時`
-      ];
-
-      periodDays.forEach(d => {
+      html += `<tr><td class="staff-name-col">${escapeHtml(staff.name)} (${escapeHtml(staff.role)})</td>`;
+      for (let day = 1; day <= 15; day++) {
+        const d = new Date(year, month, day);
         const dateIso = formatDateIso(d);
         const shiftId = state.schedules[`${staff.id}_${dateIso}`];
-        if (shiftId) {
-          const shift = state.shifts.find(s => s.id === shiftId);
-          row.push(shift ? `${shift.name} (${shift.hours}h)` : '-');
-        } else {
-          row.push('未排班');
-        }
-      });
+        const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
 
-      row.push(`${hours} 小時`, `NT$ ${cost}`);
-      csv += row.map(r => `"${r}"`).join(',') + '\r\n';
+        if (shift) {
+          const shiftText = state.shiftDisplayLang === 'en'
+            ? (shift.enCode || shift.code || shift.name)
+            : `${shift.name} [${shift.code}]`;
+          const isOff = shift.id === 'shift_off' || shift.hours === 0;
+          const bgStyle = isOff ? 'background-color:#f1f5f9;color:#64748b;' : `background-color:${shift.color}25;color:${shift.color};font-weight:bold;`;
+          html += `<td class="shift-cell" style="${bgStyle}">${shiftText}</td>`;
+        } else {
+          html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+        }
+      }
+      html += `</tr>`;
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // ========================================================================
+    // Blank Row Separator
+    // ========================================================================
+    html += `<tr><td colspan="16" class="empty-separator"></td></tr>`;
+
+    // ========================================================================
+    // Section 2: Days 16 to End of Month (16 ~ 28/29/30/31)
+    // ========================================================================
+    // Title Row
+    html += `<tr><th colspan="16" class="title-row">${year} 年 ${month + 1} 月份 員工排班總表（下半月：16 ~ ${daysInMonth} 號）</th></tr>`;
+
+    // Date Row (B?~P? = 16號 ~ daysInMonth號)
+    html += `<tr><th class="header-date">員工 \\ 日期</th>`;
+    for (let day = 16; day <= 30; day++) {
+      if (day <= daysInMonth) {
+        html += `<th class="header-date">${day}號</th>`;
+      } else {
+        html += `<th class="header-date" style="background-color:#64748b;">-</th>`;
+      }
+    }
+    // Column 16: If month has 31 days, put day 31 in Column P (15th column) or extra
+    if (daysInMonth === 31) {
+      html += `<th class="header-date">31號</th>`;
+    }
+    html += `</tr>`;
+
+    // Weekday Row
+    html += `<tr><th class="header-week">星期</th>`;
+    for (let day = 16; day <= 30; day++) {
+      if (day <= daysInMonth) {
+        const d = new Date(year, month, day);
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const weekName = DAY_NAMES_ZH[d.getDay()];
+        html += `<th class="header-week ${isWeekend ? 'weekend' : ''}">${weekName}</th>`;
+      } else {
+        html += `<th class="header-week" style="color:#94a3b8;">-</th>`;
+      }
+    }
+    if (daysInMonth === 31) {
+      const d = new Date(year, month, 31);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      html += `<th class="header-week ${isWeekend ? 'weekend' : ''}">${DAY_NAMES_ZH[d.getDay()]}</th>`;
+    }
+    html += `</tr>`;
+
+    // Staff Shift Rows for Section 2
+    state.staff.forEach(staff => {
+      html += `<tr><td class="staff-name-col">${escapeHtml(staff.name)} (${escapeHtml(staff.role)})</td>`;
+      for (let day = 16; day <= 30; day++) {
+        if (day <= daysInMonth) {
+          const d = new Date(year, month, day);
+          const dateIso = formatDateIso(d);
+          const shiftId = state.schedules[`${staff.id}_${dateIso}`];
+          const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
+
+          if (shift) {
+            const shiftText = state.shiftDisplayLang === 'en'
+              ? (shift.enCode || shift.code || shift.name)
+              : `${shift.name} [${shift.code}]`;
+            const isOff = shift.id === 'shift_off' || shift.hours === 0;
+            const bgStyle = isOff ? 'background-color:#f1f5f9;color:#64748b;' : `background-color:${shift.color}25;color:${shift.color};font-weight:bold;`;
+            html += `<td class="shift-cell" style="${bgStyle}">${shiftText}</td>`;
+          } else {
+            html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+          }
+        } else {
+          html += `<td class="shift-cell" style="background-color:#f8fafc;color:#cbd5e1;">-</td>`;
+        }
+      }
+      if (daysInMonth === 31) {
+        const d = new Date(year, month, 31);
+        const dateIso = formatDateIso(d);
+        const shiftId = state.schedules[`${staff.id}_${dateIso}`];
+        const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
+        if (shift) {
+          const shiftText = state.shiftDisplayLang === 'en'
+            ? (shift.enCode || shift.code || shift.name)
+            : `${shift.name} [${shift.code}]`;
+          const isOff = shift.id === 'shift_off' || shift.hours === 0;
+          const bgStyle = isOff ? 'background-color:#f1f5f9;color:#64748b;' : `background-color:${shift.color}25;color:${shift.color};font-weight:bold;`;
+          html += `<td class="shift-cell" style="${bgStyle}">${shiftText}</td>`;
+        } else {
+          html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+        }
+      }
+      html += `</tr>`;
+    });
+
+    html += `</table></body></html>`;
+
+    // Create Blob with Excel MIME and UTF-8 BOM
+    const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const startStr = formatDateIso(periodDays[0]);
     a.href = url;
-    a.download = `ShiftMaster_班表_${startStr}.csv`;
+    a.download = `排班總表_${year}年${month + 1}月份.xls`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    showToast('已成功匯出班表為 Excel/CSV 檔案！', 'success');
+    showToast(`📊 已成功匯出雙段式 EXCEL 檔案 (${year}年${month + 1}月)！`, 'success');
   }
 
   // ==========================================================================
@@ -1170,10 +1709,117 @@
   }
 
   // ==========================================================================
+  // Bottom Sheet & Popovers
+  // ==========================================================================
+  function openBottomSheet(staff, dateStr, dayName) {
+    state.activeTarget = { staffId: staff.id, dateStr };
+
+    elBottomSheetTitle.textContent = `指派班別：${staff.name}`;
+    elBottomSheetSubtitle.textContent = `日期：${dateStr} (${dayName}) ・ 職稱：${staff.role}`;
+
+    elDrawerShiftsList.innerHTML = '';
+    const workShifts = state.shifts.filter(s => s.id !== 'shift_off');
+
+    workShifts.forEach(shift => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'drawer-shift-item';
+      item.style.backgroundColor = shift.color;
+
+      const codeText = getShiftDisplayShort(shift);
+      const nameText = state.shiftDisplayLang === 'en' ? (shift.enName || shift.name) : shift.name;
+
+      item.innerHTML = `
+        <div class="drawer-shift-title">
+          <span style="padding:0.1rem 0.45rem;background:rgba(0,0,0,0.25);border-radius:4px;font-size:0.85rem;">${codeText}</span>
+          <span>${nameText}</span>
+        </div>
+        <div class="drawer-shift-time">
+          ${shift.start}-${shift.end} (${shift.hours}h)
+        </div>
+      `;
+
+      item.addEventListener('click', () => {
+        assignShift(staff.id, dateStr, shift.id);
+        closeBottomSheet();
+      });
+
+      elDrawerShiftsList.appendChild(item);
+    });
+
+    elBottomSheetBackdrop.classList.add('open');
+  }
+
+  function closeBottomSheet() {
+    elBottomSheetBackdrop.classList.remove('open');
+    state.activeTarget = null;
+  }
+
+  function openShiftPicker(staffId, dateStr, anchorEl) {
+    elShiftPicker.innerHTML = '';
+
+    state.shifts.forEach(shift => {
+      const item = document.createElement('div');
+      item.className = 'shift-picker-item';
+
+      const shortCode = getShiftDisplayShort(shift);
+      const titleText = state.shiftDisplayLang === 'en' ? (shift.enName || shift.name) : shift.name;
+
+      item.innerHTML = `
+        <span style="display:flex;align-items:center;gap:0.4rem;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${shift.color};"></span>
+          <span>${escapeHtml(titleText)} [${shortCode}]</span>
+        </span>
+        <span style="font-size:0.75rem;opacity:0.7;">${shift.hours > 0 ? shift.hours + 'h' : '休'}</span>
+      `;
+      item.addEventListener('click', () => {
+        assignShift(staffId, dateStr, shift.id);
+        closeShiftPicker();
+      });
+      elShiftPicker.appendChild(item);
+    });
+
+    const removeItem = document.createElement('div');
+    removeItem.className = 'shift-picker-item remove-item';
+    removeItem.innerHTML = `<span>❌ 清除此格班別</span>`;
+    removeItem.addEventListener('click', () => {
+      assignShift(staffId, dateStr, null);
+      closeShiftPicker();
+    });
+    elShiftPicker.appendChild(removeItem);
+
+    const rect = anchorEl.getBoundingClientRect();
+    elShiftPicker.style.display = 'flex';
+    elShiftPicker.style.top = `${window.scrollY + rect.bottom + 4}px`;
+    elShiftPicker.style.left = `${window.scrollX + rect.left}px`;
+  }
+
+  function closeShiftPicker() {
+    elShiftPicker.style.display = 'none';
+  }
+
+  function assignShift(staffId, dateStr, shiftId) {
+    const key = `${staffId}_${dateStr}`;
+    if (shiftId === null) {
+      delete state.schedules[key];
+      showToast('已清除排班', 'success');
+    } else {
+      state.schedules[key] = shiftId;
+      const shift = state.shifts.find(s => s.id === shiftId);
+      showToast(`已排定：${shift ? shift.name : ''}`, 'success');
+    }
+    saveState();
+    renderAll();
+  }
+
+  // ==========================================================================
   // Event Listeners & Binding
   // ==========================================================================
   function setupEventListeners() {
-    // Period Mode Change
+    // 1. Language Toggle
+    elBtnToggleShiftLang.addEventListener('click', toggleShiftDisplayLang);
+
+    // 2. Period Mode Change
     elPeriodModeSelect.addEventListener('change', (e) => {
       state.periodMode = e.target.value;
       saveState();
@@ -1192,7 +1838,7 @@
       }
     });
 
-    // Custom Date Apply Button
+    // Custom Date Apply
     elBtnApplyCustomDates.addEventListener('click', () => {
       const sVal = elInputPeriodStart.value;
       const eVal = elInputPeriodEnd.value;
@@ -1214,14 +1860,8 @@
     });
 
     // Prev / Next Period
-    document.getElementById('btn-prev-period').addEventListener('click', () => {
-      shiftPeriod(-1);
-    });
-
-    document.getElementById('btn-next-period').addEventListener('click', () => {
-      shiftPeriod(1);
-    });
-
+    document.getElementById('btn-prev-period').addEventListener('click', () => shiftPeriod(-1));
+    document.getElementById('btn-next-period').addEventListener('click', () => shiftPeriod(1));
     document.getElementById('btn-current-period').addEventListener('click', () => {
       const range = calculatePeriodRange(state.periodMode, new Date());
       state.periodStart = range.start;
@@ -1276,13 +1916,82 @@
       }
     });
 
-    // Smart Auto-Schedule
+    // Auto-Schedule buttons
     document.getElementById('btn-auto-schedule').addEventListener('click', runAutoScheduler);
     document.getElementById('m-btn-auto-schedule').addEventListener('click', runAutoScheduler);
 
-    // CSV Export
-    document.getElementById('btn-export-csv').addEventListener('click', exportScheduleToCSV);
-    document.getElementById('m-btn-export').addEventListener('click', exportScheduleToCSV);
+    // Auto-Schedule Rules Modal buttons
+    document.getElementById('btn-open-auto-rules').addEventListener('click', openAutoRulesModal);
+    document.getElementById('btn-run-auto-schedule-from-modal').addEventListener('click', () => {
+      elAutoRulesModal.classList.remove('open');
+      runAutoScheduler();
+    });
+
+    // Add Anti-Pair rule
+    document.getElementById('btn-add-antipair').addEventListener('click', () => {
+      const idA = document.getElementById('select-antipair-a').value;
+      const idB = document.getElementById('select-antipair-b').value;
+      if (!idA || !idB || idA === idB) {
+        showToast('請選擇兩位不同的員工設定互斥！', 'warning');
+        return;
+      }
+      const exists = state.antiPairs.some(p => (p[0] === idA && p[1] === idB) || (p[0] === idB && p[1] === idA));
+      if (exists) {
+        showToast('此互斥組合已存在！', 'warning');
+        return;
+      }
+      state.antiPairs.push([idA, idB]);
+      saveState();
+      renderAutoRulesModalUI();
+      showToast('已新增搭檔互斥規則！', 'success');
+    });
+
+    // Add Role Restriction
+    document.getElementById('btn-add-role-restrict').addEventListener('click', () => {
+      const role = document.getElementById('select-role-restrict-role').value;
+      const shiftId = document.getElementById('select-role-restrict-shift').value;
+      if (!role || !shiftId) return;
+
+      const exists = state.roleRestrictions.some(r => r.role === role && r.shiftId === shiftId);
+      if (exists) {
+        showToast('此職位班別限制已存在！', 'warning');
+        return;
+      }
+      state.roleRestrictions.push({ role, shiftId });
+      saveState();
+      renderAutoRulesModalUI();
+      showToast(`已新增限制：${role} 不可上此班別`, 'success');
+    });
+
+    // Alert Card Click -> Opens Violations / Rules Inspector
+    elCardAlert.addEventListener('click', () => openRulesModal('violations'));
+    document.getElementById('m-btn-rules').addEventListener('click', () => openRulesModal('violations'));
+
+    // Rules Modal Tabs
+    document.getElementById('tab-btn-violations').addEventListener('click', () => switchRulesTab('violations'));
+    document.getElementById('tab-btn-rules-settings').addEventListener('click', () => switchRulesTab('settings'));
+
+    // Save Rules Settings Form
+    document.getElementById('form-rules-settings').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const maxShifts = parseInt(document.getElementById('rule-max-shifts-day').value, 10) || 1;
+      const maxConsecutive = parseInt(document.getElementById('rule-max-consecutive-days').value, 10) || 6;
+      const maxDailyHours = parseFloat(document.getElementById('rule-max-daily-hours').value) || 12;
+
+      state.rules = {
+        maxDailyShifts: maxShifts,
+        maxConsecutiveDays: maxConsecutive,
+        maxDailyHours: maxDailyHours
+      };
+      saveState();
+      renderAll();
+      switchRulesTab('violations');
+      showToast('✅ 法規規則設定已成功儲存！', 'success');
+    });
+
+    // Excel Export buttons
+    document.getElementById('btn-export-excel').addEventListener('click', exportCustomExcel);
+    document.getElementById('m-btn-export').addEventListener('click', exportCustomExcel);
 
     // Print
     document.getElementById('btn-print').addEventListener('click', () => {
@@ -1293,9 +2002,19 @@
     const openStaffModal = () => {
       elStaffModal.classList.add('open');
       renderStaffModalList();
+      renderRolesManagementUI();
     };
     document.getElementById('btn-open-staff').addEventListener('click', openStaffModal);
     document.getElementById('m-btn-staff').addEventListener('click', openStaffModal);
+
+    // Add Custom Role Button
+    document.getElementById('btn-add-role').addEventListener('click', () => {
+      const input = document.getElementById('input-new-role');
+      if (input) {
+        addCustomRole(input.value);
+        input.value = '';
+      }
+    });
 
     // Shifts Modal
     const openShiftsModal = () => {
@@ -1314,10 +2033,12 @@
       });
     });
 
-    [elStaffModal, elShiftsModal].forEach(modal => {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.remove('open');
-      });
+    [elStaffModal, elShiftsModal, elRulesModal, elAutoRulesModal].forEach(modal => {
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) modal.classList.remove('open');
+        });
+      }
     });
 
     // Bottom Sheet Close
@@ -1360,11 +2081,13 @@
       document.getElementById('staff-name').value = '';
     });
 
-    // Add Shift Form
+    // Add Shift Form (Supporting Chinese and English names/codes and colors)
     document.getElementById('form-add-shift').addEventListener('submit', (e) => {
       e.preventDefault();
       const name = document.getElementById('shift-name').value.trim();
       const code = document.getElementById('shift-code').value.trim();
+      const enName = (document.getElementById('shift-en-name') ? document.getElementById('shift-en-name').value.trim() : '') || name;
+      const enCode = (document.getElementById('shift-en-code') ? document.getElementById('shift-en-code').value.trim() : '') || code;
       const start = document.getElementById('shift-start').value;
       const end = document.getElementById('shift-end').value;
       const hours = parseFloat(document.getElementById('shift-hours').value) || 8;
@@ -1373,13 +2096,16 @@
 
       if (!name || !code) return;
 
-      const newShift = { id: `shift_${Date.now()}`, name, code, start, end, hours, color, targetStaff };
+      const newShift = { id: `shift_${Date.now()}`, name, code, enName, enCode, start, end, hours, color, targetStaff };
       state.shifts.push(newShift);
+      state.shiftFairness.push(newShift.id);
       saveState();
       renderAll();
-      showToast(`已成功新增班別：${name}`, 'success');
+      showToast(`已成功新增班別：${name} (${enName})`, 'success');
       document.getElementById('shift-name').value = '';
       document.getElementById('shift-code').value = '';
+      if (document.getElementById('shift-en-name')) document.getElementById('shift-en-name').value = '';
+      if (document.getElementById('shift-en-code')) document.getElementById('shift-en-code').value = '';
     });
 
     // Desktop Popover Outside Click
