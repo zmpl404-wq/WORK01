@@ -777,6 +777,23 @@
 
       const header = document.createElement('div');
       header.className = 'staff-weekly-card-header';
+
+      // Build shift count summary
+      const shiftCounts = {};
+      days.forEach(d => {
+        const dateIso = formatDateIso(d);
+        const entry = getScheduleEntry(staff.id, dateIso);
+        if (entry && entry.shiftId) {
+          const shift = state.shifts.find(s => s.id === entry.shiftId);
+          if (shift) {
+            shiftCounts[shift.code] = (shiftCounts[shift.code] || 0) + 1;
+          }
+        }
+      });
+      const summaryParts = Object.entries(shiftCounts).map(([code, count]) => `${code}:${count}`);
+      summaryParts.push(`工時:${breakdown.totalHours}H`);
+      const summaryText = summaryParts.join(' ');
+
       header.innerHTML = `
         <div style="display:flex;align-items:center;gap:0.65rem;">
           <div class="staff-avatar" style="background:${staff.color};width:32px;height:32px;font-size:0.8rem;">
@@ -787,8 +804,8 @@
             <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
           </div>
         </div>
-        <div style="font-size:0.825rem;font-weight:700;color:var(--text-primary);">
-          工時 ${breakdown.normalHours}h ${breakdown.otHours > 0 ? `<span style="color:#f59e0b;">(+${breakdown.otHours}h加班)</span>` : ''} ＝ 計 <b>${breakdown.totalHours}h</b>
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);white-space:nowrap;">
+          ${escapeHtml(summaryText)}
         </div>
       `;
       card.appendChild(header);
@@ -852,7 +869,8 @@
       const dateIso = formatDateIso(d);
       const isToday = dateIso === todayIso;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      const dayNameShort = state.shiftDisplayLang === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_SHORT_ZH[d.getDay()];
+      // Dates ALWAYS shown in Chinese regardless of shift lang
+      const dayNameShort = DAY_NAMES_SHORT_ZH[d.getDay()];
       const dayFormatted = `${d.getDate()}`;
 
       const th = document.createElement('th');
@@ -1013,6 +1031,8 @@
     let totalShiftsAssigned = 0;
     let totalCost = 0;
     let totalLeaveDays = 0;
+    let hoursOverCount = 0;
+    let leaveShortCount = 0;
 
     state.staff.forEach(staff => {
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
@@ -1023,7 +1043,13 @@
       const otCost = breakdown.otHours * staff.wage * state.otMultiplier;
       totalCost += (normalCost + otCost);
 
-      // Count leaves and assigned work shifts
+      // Hours over-limit count
+      const allowed = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : (staff.maxHours * Math.max(1, periodDays.length / 7));
+      if (breakdown.totalHours > allowed) hoursOverCount++;
+
+      // Leave short count
+      const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : 8;
+      let actualLeaves = 0;
       periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
         const entry = getScheduleEntry(staff.id, dateIso);
@@ -1031,6 +1057,7 @@
           const shift = state.shifts.find(s => s.id === entry.shiftId);
           if (shift) {
             if (shift.isLeave || shift.hours === 0) {
+              actualLeaves++;
               totalLeaveDays++;
             } else {
               totalShiftsAssigned++;
@@ -1038,23 +1065,24 @@
           }
         }
       });
+      if (actualLeaves < quota) leaveShortCount++;
     });
 
     const grandTotalHours = totalNormalHours + totalOtHours;
     const avgHours = state.staff.length > 0 ? (grandTotalHours / state.staff.length).toFixed(1) : 0;
 
     if (elStatHours) {
-      elStatHours.innerHTML = `${grandTotalHours} <span style="font-size:0.85rem;font-weight:500;">小時</span>`;
+      elStatHours.innerHTML = `${hoursOverCount} <span style="font-size:0.85rem;font-weight:500;">人超標</span>`;
     }
     if (elStatAvgHours) {
-      elStatAvgHours.textContent = `人均: ${avgHours}h (含加班 ${totalOtHours}h)`;
+      elStatAvgHours.textContent = `總工時: ${grandTotalHours}h | 人均: ${avgHours}h`;
     }
 
     if (elStatShifts) {
-      elStatShifts.innerHTML = `${totalLeaveDays} <span style="font-size:0.85rem;font-weight:500;">天</span>`;
+      elStatShifts.innerHTML = `${leaveShortCount} <span style="font-size:0.85rem;font-weight:500;">人未足額</span>`;
     }
     if (elStatCoverage) {
-      elStatCoverage.textContent = `排班出勤人次：${totalShiftsAssigned} 班次`;
+      elStatCoverage.textContent = `總休假: ${totalLeaveDays}天 | 出勤: ${totalShiftsAssigned}班次`;
     }
 
     if (elStatCost) {
@@ -1268,7 +1296,6 @@
     if (!content) return;
 
     const periodDays = getPeriodDays();
-    const periodWeeks = Math.max(1, periodDays.length / 7);
 
     let html = `
       <div style="overflow-x:auto;">
@@ -1277,12 +1304,12 @@
             <tr>
               <th>姓名</th>
               <th>職稱</th>
-              <th>每週基準</th>
               <th>當期允許上限</th>
               <th>一般工時</th>
               <th>加班工時</th>
               <th>當期總工時</th>
               <th>狀態</th>
+              <th>調整上限</th>
             </tr>
           </thead>
           <tbody>
@@ -1290,15 +1317,14 @@
 
     state.staff.forEach(staff => {
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
-      const allowed = Math.round(staff.maxHours * periodWeeks);
+      const allowed = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : (staff.maxHours * Math.max(1, periodDays.length / 7));
       const isOver = breakdown.totalHours > allowed;
 
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
           <td><span class="staff-role-badge">${escapeHtml(staff.role)}</span></td>
-          <td>${staff.maxHours}h/週</td>
-          <td>${allowed}h</td>
+          <td>${Math.round(allowed)}h</td>
           <td>${breakdown.normalHours}h</td>
           <td style="color:#f59e0b;font-weight:700;">+${breakdown.otHours}h</td>
           <td style="font-weight:800;font-size:0.95rem;">${breakdown.totalHours}h</td>
@@ -1306,6 +1332,13 @@
             <span class="headcount-status-badge ${isOver ? 'status-shortage' : 'status-ok'}">
               ${isOver ? '工時超標' : '正常合規'}
             </span>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input type="number" class="leave-quota-input hours-limit-input" data-staff-id="${staff.id}" value="${Math.round(allowed)}" min="0" max="999" style="width:70px;">
+              <span style="font-size:0.75rem;color:var(--text-muted);">h</span>
+              <button class="btn btn-secondary btn-save-hours-limit" data-staff-id="${staff.id}" style="padding:0.2rem 0.5rem;font-size:0.72rem;">儲存</button>
+            </div>
           </td>
         </tr>
       `;
@@ -1318,6 +1351,23 @@
     `;
 
     content.innerHTML = html;
+
+    // Bind save limit buttons
+    content.querySelectorAll('.btn-save-hours-limit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const staffId = btn.dataset.staffId;
+        const input = content.querySelector(`.hours-limit-input[data-staff-id="${staffId}"]`);
+        if (input) {
+          const staff = state.staff.find(s => s.id === staffId);
+          if (staff) {
+            staff.periodMaxHours = parseFloat(input.value) || 0;
+            saveState();
+            renderKPIDashboard();
+            showToast(`已更新 ${staff.name} 當期工時上限為 ${staff.periodMaxHours} h`, 'success');
+          }
+        }
+      });
+    });
   }
 
   // ==========================================================================
@@ -1446,10 +1496,9 @@
             <tr>
               <th>姓名</th>
               <th>職稱</th>
-              <th>本月應休 (天)</th>
-              <th>已排休 (天)</th>
-              <th>假別細項</th>
-              <th>剩餘 / 欠休</th>
+              <th>應休</th>
+              <th>已排休</th>
+              <th>未休</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1459,7 +1508,6 @@
     state.staff.forEach(staff => {
       const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : 8;
       let actualLeaves = 0;
-      const leaveBreakdown = {}; // shiftName -> count
 
       periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
@@ -1468,13 +1516,12 @@
           const shift = state.shifts.find(s => s.id === entry.shiftId);
           if (shift && (shift.isLeave || shift.hours === 0)) {
             actualLeaves++;
-            leaveBreakdown[shift.name] = (leaveBreakdown[shift.name] || 0) + 1;
           }
         }
       });
 
       const diff = quota - actualLeaves;
-      const breakdownText = Object.entries(leaveBreakdown).map(([k, v]) => `${k} ${v}天`).join('、') || '無休假排定';
+      const isShort = diff > 0;
 
       html += `
         <tr>
@@ -1484,10 +1531,9 @@
             <input type="number" class="leave-quota-input" data-staff-id="${staff.id}" value="${quota}" min="0" max="31">
           </td>
           <td><span class="leave-actual-badge">${actualLeaves} 天</span></td>
-          <td style="font-size:0.75rem;color:var(--text-secondary);">${escapeHtml(breakdownText)}</td>
           <td>
-            <span class="headcount-status-badge ${diff === 0 ? 'status-ok' : (diff > 0 ? 'status-shortage' : 'status-ok')}">
-              ${diff === 0 ? '已足額' : (diff > 0 ? `尚欠 ${diff} 天` : `超出 ${Math.abs(diff)} 天`)}
+            <span class="headcount-status-badge ${diff === 0 ? 'status-ok' : (isShort ? 'status-shortage' : 'status-ok')}">
+              ${diff === 0 ? '已足額' : (isShort ? `尚缺 ${diff} 天` : `超出 ${Math.abs(diff)} 天`)}
             </span>
           </td>
           <td>
@@ -1518,6 +1564,7 @@
             staff.leaveQuota = parseInt(input.value, 10) || 0;
             saveState();
             renderLeavesModalUI();
+            renderKPIDashboard();
             showToast(`已更新 ${staff.name} 應休天數為 ${staff.leaveQuota} 天`, 'success');
           }
         }
@@ -2009,28 +2056,70 @@
       item.className = 'entity-item';
 
       const leaveTag = shift.isLeave ? '<span style="font-size:0.7rem;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 5px;border-radius:4px;margin-left:4px;">假別</span>' : '';
+      const bgDisplay = shift.bgTransparent ? '透明' : shift.color;
 
       item.innerHTML = `
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-          <div style="width:16px;height:16px;border-radius:4px;background:${shift.color};box-shadow:0 0 4px ${shift.color}80;"></div>
-          <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex:1;min-width:0;">
+          <div style="width:16px;height:16px;border-radius:4px;background:${shift.bgTransparent ? 'transparent' : shift.color};box-shadow:${shift.bgTransparent ? 'none' : '0 0 4px ' + shift.color + '80'};border:1px solid ${shift.color};"></div>
+          <div style="min-width:0;">
             <div style="font-weight:700;font-size:0.9rem;color:var(--text-primary);">
-              ${escapeHtml(shift.name)} [${shift.code}] / EN: [${shift.enCode || shift.code}] ${leaveTag}
+              ${escapeHtml(shift.name)} <span style="color:${shift.textColor || '#fff'};background:${shift.bgTransparent ? 'transparent' : shift.color};padding:0 4px;border-radius:3px;">[${shift.code}]</span> / EN: [${shift.enCode || shift.code}] ${leaveTag}
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted);">
-              ${shift.start} ~ ${shift.end} ・ 計薪 ${shift.hours}h ・ 目標 ${shift.targetStaff} 人
+              ${shift.start} ~ ${shift.end} ・ 計薪 ${shift.hours}h ・ 目標 ${shift.targetStaff} 人 ・ 字體: <span style="color:${shift.textColor || '#fff'};">■</span>
             </div>
           </div>
         </div>
-        <div>
-          ${shift.id === 'shift_off' ? '<span style="font-size:0.75rem;color:var(--text-muted);">系統預設</span>' : `
-            <button class="btn btn-icon-only btn-delete-shift" data-id="${shift.id}" title="移除班別" style="color:var(--accent-danger);">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          `}
+        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+          <button class="btn btn-icon-only btn-edit-shift" data-id="${shift.id}" title="編輯班別" style="color:var(--accent-primary);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
+          <button class="btn btn-icon-only btn-delete-shift" data-id="${shift.id}" title="移除班別" style="color:var(--accent-danger);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
         </div>
       `;
 
+      // Edit button: load shift into form
+      const editBtn = item.querySelector('.btn-edit-shift');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          const nameEl = document.getElementById('shift-name');
+          const codeEl = document.getElementById('shift-code');
+          const enCodeEl = document.getElementById('shift-en-code');
+          const textColorEl = document.getElementById('shift-text-color');
+          const colorEl = document.getElementById('shift-color');
+          const bgTransEl = document.getElementById('shift-bg-transparent');
+          const startEl = document.getElementById('shift-start');
+          const endEl = document.getElementById('shift-end');
+          const hoursEl = document.getElementById('shift-hours');
+          const targetEl = document.getElementById('shift-target-staff');
+          const isLeaveEl = document.getElementById('shift-is-leave');
+          const saveBtn = document.getElementById('btn-save-shift');
+
+          if (nameEl) nameEl.value = shift.name;
+          if (codeEl) codeEl.value = shift.code;
+          if (enCodeEl) enCodeEl.value = shift.enCode || shift.code;
+          if (textColorEl) textColorEl.value = shift.textColor || '#ffffff';
+          if (colorEl) colorEl.value = shift.color;
+          if (bgTransEl) bgTransEl.checked = !!shift.bgTransparent;
+          if (startEl) startEl.value = shift.start === '-' ? '00:00' : shift.start;
+          if (endEl) endEl.value = shift.end === '-' ? '00:00' : shift.end;
+          if (hoursEl) hoursEl.value = shift.hours;
+          if (targetEl) targetEl.value = shift.targetStaff;
+          if (isLeaveEl) isLeaveEl.checked = !!shift.isLeave;
+
+          // Mark form as editing this shift
+          const form = document.getElementById('form-add-shift');
+          if (form) form.dataset.editId = shift.id;
+          if (saveBtn) saveBtn.textContent = '更新班別';
+
+          // Scroll form into view
+          if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+
+      // Delete button
       const delBtn = item.querySelector('.btn-delete-shift');
       if (delBtn) {
         delBtn.addEventListener('click', () => {
@@ -2038,6 +2127,12 @@
             state.shifts = state.shifts.filter(s => s.id !== shift.id);
             state.shiftFairness = state.shiftFairness.filter(id => id !== shift.id);
             state.roleRestrictions = state.roleRestrictions.filter(rr => rr.shiftId !== shift.id);
+            // Clear schedules using this shift
+            Object.keys(state.schedules).forEach(k => {
+              if (state.schedules[k] && state.schedules[k].shiftId === shift.id) {
+                delete state.schedules[k];
+              }
+            });
             saveState();
             renderAll();
             renderShiftsModalList();
@@ -2786,7 +2881,7 @@
       });
     }
 
-    // Add Shift Form Submit (簡化：留中文名稱、中文代碼、英文代碼、假別標記)
+    // Add Shift Form Submit (簡化：留中文名稱、中文代碼、英文代碼、假別標記, 字體顏色, 透明)
     const formAddShift = document.getElementById('form-add-shift');
     if (formAddShift) {
       formAddShift.addEventListener('submit', (e) => {
@@ -2798,18 +2893,46 @@
         const end = document.getElementById('shift-end').value;
         const hours = parseFloat(document.getElementById('shift-hours').value) || 0;
         const color = document.getElementById('shift-color').value;
+        const textColor = document.getElementById('shift-text-color') ? document.getElementById('shift-text-color').value : '#ffffff';
+        const bgTransparent = document.getElementById('shift-bg-transparent') ? document.getElementById('shift-bg-transparent').checked : false;
         const targetStaff = parseInt(document.getElementById('shift-target-staff').value, 10) || 1;
         const isLeave = document.getElementById('shift-is-leave') ? document.getElementById('shift-is-leave').checked : (hours === 0);
 
         if (!name || !code) return;
 
-        const newShift = { id: `shift_${Date.now()}`, name, code, enCode, start, end, hours, color, targetStaff, isLeave };
-        state.shifts.push(newShift);
-        if (!isLeave && hours > 0) state.shiftFairness.push(newShift.id);
-        saveState();
-        renderAll();
-        renderShiftsModalList();
-        showToast(`已成功新增班別：${name} [${code}]`, 'success');
+        const editId = formAddShift.dataset.editId;
+        if (editId) {
+          // Update existing shift
+          const existing = state.shifts.find(s => s.id === editId);
+          if (existing) {
+            existing.name = name;
+            existing.code = code.slice(0, 1);
+            existing.enCode = enCode.slice(0, 1).toUpperCase();
+            existing.start = start;
+            existing.end = end;
+            existing.hours = hours;
+            existing.color = color;
+            existing.textColor = textColor;
+            existing.bgTransparent = bgTransparent;
+            existing.targetStaff = targetStaff;
+            existing.isLeave = isLeave;
+            delete formAddShift.dataset.editId;
+            const saveBtn = document.getElementById('btn-save-shift');
+            if (saveBtn) saveBtn.textContent = '新增班別';
+            saveState();
+            renderAll();
+            renderShiftsModalList();
+            showToast(`已更新班別：${name} [${existing.code}]`, 'success');
+          }
+        } else {
+          const newShift = { id: `shift_${Date.now()}`, name, code: code.slice(0, 1), enCode: enCode.slice(0, 1).toUpperCase(), start, end, hours, color, textColor, bgTransparent, targetStaff, isLeave };
+          state.shifts.push(newShift);
+          if (!isLeave && hours > 0) state.shiftFairness.push(newShift.id);
+          saveState();
+          renderAll();
+          renderShiftsModalList();
+          showToast(`已成功新增班別：${name} [${code}]`, 'success');
+        }
         document.getElementById('shift-name').value = '';
         document.getElementById('shift-code').value = '';
         document.getElementById('shift-en-code').value = '';
@@ -2850,6 +2973,113 @@
 
     if (elThemeToggle) elThemeToggle.addEventListener('click', toggleThemeAction);
     if (mBtnTheme) mBtnTheme.addEventListener('click', toggleThemeAction);
+
+    // ======================================================================
+    // Save Overtime from Drawer (with confirmation)
+    // ======================================================================
+    const btnSaveDrawerOt = document.getElementById('btn-save-drawer-ot');
+    if (btnSaveDrawerOt) {
+      btnSaveDrawerOt.addEventListener('click', () => {
+        if (!state.activeTarget) return;
+        const enteredOt = elInputOvertimeHours ? (parseFloat(elInputOvertimeHours.value) || 0) : 0;
+        if (!confirm(`確認將加班時數儲存為 ${enteredOt} 小時？（將更新薪資計算與工時統計）`)) return;
+
+        const key = `${state.activeTarget.staffId}_${state.activeTarget.dateStr}`;
+        const existing = state.schedules[key];
+        if (existing) {
+          existing.otHours = enteredOt;
+          saveState();
+          renderAll();
+          showToast(`已儲存加班 ${enteredOt} 小時`, 'success');
+        } else {
+          showToast('請先指派班別再儲存加班時數', 'warning');
+        }
+      });
+    }
+
+    // ======================================================================
+    // CSV / JSON Export (backup all state)
+    // ======================================================================
+    function doExportJson() {
+      const data = {
+        staff: state.staff,
+        shifts: state.shifts,
+        roles: state.roles,
+        schedules: state.schedules,
+        rules: state.rules,
+        antiPairs: state.antiPairs,
+        roleRestrictions: state.roleRestrictions,
+        shiftFairness: state.shiftFairness,
+        otMultiplier: state.otMultiplier,
+        shiftDisplayLang: state.shiftDisplayLang,
+        exportedAt: new Date().toISOString()
+      };
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `排班備份_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('✅ 已成功匯出 JSON 備份！', 'success');
+    }
+
+    const btnExportCsv = document.getElementById('btn-export-csv');
+    if (btnExportCsv) btnExportCsv.addEventListener('click', doExportJson);
+
+    // ======================================================================
+    // JSON Import (restore state from backup file)
+    // ======================================================================
+    const btnImportCsv = document.getElementById('btn-import-csv');
+    const mBtnImport = document.getElementById('m-btn-import');
+    const inputImportFile = document.getElementById('input-import-file');
+
+    function triggerImport() {
+      if (inputImportFile) inputImportFile.click();
+    }
+
+    if (btnImportCsv) btnImportCsv.addEventListener('click', triggerImport);
+    if (mBtnImport) mBtnImport.addEventListener('click', triggerImport);
+
+    if (inputImportFile) {
+      inputImportFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const imported = JSON.parse(ev.target.result);
+            if (!imported.staff || !imported.schedules) {
+              showToast('檔案格式不符合，無法匯入！', 'warning');
+              return;
+            }
+            if (!confirm('確認要匯入備份檔案？（目前資料將被覆蓋）')) return;
+
+            if (imported.staff) state.staff = imported.staff;
+            if (imported.shifts) state.shifts = imported.shifts;
+            if (imported.roles) state.roles = imported.roles;
+            if (imported.schedules) state.schedules = imported.schedules;
+            if (imported.rules) state.rules = imported.rules;
+            if (imported.antiPairs) state.antiPairs = imported.antiPairs;
+            if (imported.roleRestrictions) state.roleRestrictions = imported.roleRestrictions;
+            if (imported.shiftFairness) state.shiftFairness = imported.shiftFairness;
+            if (typeof imported.otMultiplier === 'number') state.otMultiplier = imported.otMultiplier;
+            if (imported.shiftDisplayLang) state.shiftDisplayLang = imported.shiftDisplayLang;
+
+            saveState();
+            renderAll();
+            showToast('✅ 備份檔案已成功匯入！', 'success');
+          } catch (err) {
+            showToast(`匯入失敗：${err.message}`, 'warning');
+          }
+          inputImportFile.value = '';
+        };
+        reader.readAsText(file);
+      });
+    }
   }
 
   // ==========================================================================
