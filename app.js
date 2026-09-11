@@ -146,6 +146,7 @@
   const elCostModal = document.getElementById('modal-cost-detail');
   const elLeavesModal = document.getElementById('modal-leaves');
   const elExcelModal = document.getElementById('modal-excel-options');
+  const elShiftStatsModal = document.getElementById('modal-shift-stats');
 
   // Table-view Language Display Toggle
   const elBtnToggleShiftLangTable = document.getElementById('btn-toggle-shift-lang-table');
@@ -799,22 +800,36 @@
       const header = document.createElement('div');
       header.className = 'staff-weekly-card-header';
 
-      // Build shift count summary (respects Chinese/English toggle)
+      // Build shift count summary according to state.shifts order with color badges
+      const workShifts = state.shifts.filter(s => !s.isLeave);
       const shiftCounts = {};
+      workShifts.forEach(sh => { shiftCounts[sh.id] = 0; });
+
       days.forEach(d => {
         const dateIso = formatDateIso(d);
         const entry = getScheduleEntry(staff.id, dateIso);
-        if (entry && entry.shiftId) {
-          const shift = state.shifts.find(s => s.id === entry.shiftId);
-          if (shift) {
-            const code = getShiftDisplayShort(shift);
-            shiftCounts[code] = (shiftCounts[code] || 0) + 1;
-          }
+        if (entry && entry.shiftId && shiftCounts[entry.shiftId] !== undefined) {
+          shiftCounts[entry.shiftId]++;
         }
       });
-      const summaryParts = Object.entries(shiftCounts).map(([code, count]) => `${code}:${count}`);
-      summaryParts.push(`時數:${breakdown.totalHours}H`);
-      const summaryText = summaryParts.join(' ');
+
+      let badgesHtml = '<div class="staff-summary-container">';
+      workShifts.forEach(shift => {
+        const code = getShiftDisplayShort(shift);
+        const count = shiftCounts[shift.id] || 0;
+        const bg = shift.bgTransparent ? 'var(--bg-secondary)' : shift.color;
+        const fg = shift.textColor || '#ffffff';
+        const borderStyle = shift.bgTransparent ? `border:1px solid ${shift.color || 'var(--border-color)'};` : '';
+        badgesHtml += `
+          <span class="staff-shift-count-badge" style="background:${bg};color:${fg};${borderStyle}">
+            ${escapeHtml(code)} ${count}
+          </span>
+        `;
+      });
+      badgesHtml += `
+        <span class="staff-hours-divider"></span>
+        <span class="staff-hours-total">時數: ${breakdown.totalHours}H</span>
+      </div>`;
 
       header.innerHTML = `
         <div style="display:flex;align-items:center;gap:0.65rem;">
@@ -826,9 +841,7 @@
             <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
           </div>
         </div>
-        <div style="font-size:0.78rem;font-weight:700;color:var(--text-secondary);white-space:nowrap;">
-          ${escapeHtml(summaryText)}
-        </div>
+        ${badgesHtml}
       `;
       card.appendChild(header);
 
@@ -1632,6 +1645,131 @@
   }
 
   // ==========================================================================
+  // Shift Stats Modal Management (班數統計總表)
+  // ==========================================================================
+  function openShiftStatsModal() {
+    if (!elShiftStatsModal) return;
+    const badge = document.getElementById('shift-stats-period-badge');
+    if (badge) {
+      const pText = document.getElementById('period-display-badge')?.textContent || '';
+      badge.textContent = `統計週期：${pText.trim()}`;
+    }
+    renderShiftStatsTable();
+    elShiftStatsModal.classList.add('open');
+  }
+
+  function renderShiftStatsTable() {
+    const table = document.getElementById('table-shift-stats');
+    if (!table) return;
+
+    const days = getPeriodDays();
+    const allShifts = state.shifts;
+
+    // Calculate count per staff & per shift
+    const stats = {};
+    const shiftColTotals = {};
+    allShifts.forEach(s => { shiftColTotals[s.id] = 0; });
+    let grandTotalShifts = 0;
+    let grandTotalHours = 0;
+
+    state.staff.forEach(staff => {
+      stats[staff.id] = {
+        counts: {},
+        totalShifts: 0,
+        totalHours: 0
+      };
+      allShifts.forEach(s => { stats[staff.id].counts[s.id] = 0; });
+
+      days.forEach(d => {
+        const dateIso = formatDateIso(d);
+        const entry = getScheduleEntry(staff.id, dateIso);
+        if (entry && entry.shiftId && stats[staff.id].counts[entry.shiftId] !== undefined) {
+          stats[staff.id].counts[entry.shiftId]++;
+          shiftColTotals[entry.shiftId]++;
+          const shiftObj = state.shifts.find(s => s.id === entry.shiftId);
+          if (shiftObj && !shiftObj.isLeave && shiftObj.hours > 0) {
+            stats[staff.id].totalShifts++;
+            grandTotalShifts++;
+          }
+        }
+      });
+      const breakdown = getStaffHoursBreakdown(staff.id, days);
+      stats[staff.id].totalHours = breakdown.totalHours;
+      grandTotalHours += breakdown.totalHours;
+    });
+
+    // Table Header
+    let html = '<thead><tr>';
+    html += '<th style="position:sticky;left:0;z-index:2;min-width:110px;text-align:left;">員工姓名</th>';
+    allShifts.forEach(shift => {
+      const code = getShiftDisplayShort(shift);
+      html += `
+        <th style="min-width:65px;text-align:center;">
+          <div style="display:inline-flex;align-items:center;gap:4px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${shift.color};"></span>
+            <span>${escapeHtml(shift.name)} [${escapeHtml(code)}]</span>
+          </div>
+        </th>
+      `;
+    });
+    html += '<th style="min-width:70px;text-align:center;font-weight:800;color:var(--accent-primary);">出勤班數</th>';
+    html += '<th style="min-width:70px;text-align:center;font-weight:800;color:var(--accent-secondary);">總工時</th>';
+    html += '</tr></thead><tbody>';
+
+    // Table Body
+    state.staff.forEach(staff => {
+      const st = stats[staff.id];
+      html += '<tr>';
+      html += `
+        <td style="position:sticky;left:0;background:var(--bg-card);z-index:1;text-align:left;font-weight:700;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div class="staff-avatar" style="background:${staff.color};width:26px;height:26px;font-size:0.75rem;">
+              ${staff.name.slice(0, 1)}
+            </div>
+            <span>${escapeHtml(staff.name)}</span>
+            <span style="font-size:0.7rem;color:var(--text-muted);">(${escapeHtml(staff.role)})</span>
+          </div>
+        </td>
+      `;
+
+      allShifts.forEach(shift => {
+        const count = st.counts[shift.id] || 0;
+        if (count > 0) {
+          const bg = shift.bgTransparent ? 'var(--bg-secondary)' : shift.color;
+          const fg = shift.textColor || '#ffffff';
+          const borderStyle = shift.bgTransparent ? `border:1px solid ${shift.color || 'var(--border-color)'};` : '';
+          html += `
+            <td style="text-align:center;">
+              <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:800;font-size:0.8rem;background:${bg};color:${fg};${borderStyle}">
+                ${count}
+              </span>
+            </td>
+          `;
+        } else {
+          html += '<td style="text-align:center;color:var(--text-muted);font-size:0.75rem;">0</td>';
+        }
+      });
+
+      html += `<td style="text-align:center;font-weight:800;color:var(--accent-primary);">${st.totalShifts}</td>`;
+      html += `<td style="text-align:center;font-weight:800;color:var(--text-primary);">${st.totalHours}H</td>`;
+      html += '</tr>';
+    });
+
+    // Table Footer (Totals)
+    html += '</tbody><tfoot><tr style="font-weight:800;background:var(--bg-tertiary);border-top:2px solid var(--border-color);">';
+    html += '<td style="position:sticky;left:0;background:var(--bg-tertiary);z-index:1;text-align:left;">全體合計</td>';
+    allShifts.forEach(shift => {
+      const colTotal = shiftColTotals[shift.id] || 0;
+      html += `<td style="text-align:center;">${colTotal}</td>`;
+    });
+    html += `<td style="text-align:center;color:var(--accent-primary);">${grandTotalShifts}</td>`;
+    html += `<td style="text-align:center;">${grandTotalHours}H</td>`;
+    html += '</tr></tfoot>';
+
+    table.innerHTML = html;
+  }
+
+  // ==========================================================================
   // Headcount Adequacy Tab Management (法規與人力規則)
   // ==========================================================================
   function openRulesModal(defaultTab = 'violations') {
@@ -1860,6 +1998,27 @@
       }
     }
 
+    // Weekday & Weekend Minimum Headcount
+    const inpAutoWeekday = document.getElementById('auto-rule-weekday-headcount');
+    const inpAutoHoliday = document.getElementById('auto-rule-holiday-headcount');
+    const hc = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
+    if (inpAutoWeekday) {
+      inpAutoWeekday.value = typeof hc.weekdayMin === 'number' ? hc.weekdayMin : 3;
+      inpAutoWeekday.onchange = () => {
+        state.rules.headcount = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
+        state.rules.headcount.weekdayMin = parseInt(inpAutoWeekday.value, 10) || 0;
+        saveState();
+      };
+    }
+    if (inpAutoHoliday) {
+      inpAutoHoliday.value = typeof hc.weekendMin === 'number' ? hc.weekendMin : 2;
+      inpAutoHoliday.onchange = () => {
+        state.rules.headcount = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
+        state.rules.headcount.weekendMin = parseInt(inpAutoHoliday.value, 10) || 0;
+        saveState();
+      };
+    }
+
     const fairnessContainer = document.getElementById('shift-fairness-toggles-container');
     if (fairnessContainer) {
       fairnessContainer.innerHTML = '';
@@ -1943,6 +2102,10 @@
   // Auto-Scheduling Solver (依據互斥、偏好、公平性平均指派)
   // ==========================================================================
   function runAutoScheduler() {
+    if (!confirm('自動排班將覆蓋現有班表內容，確認繼續？')) {
+      return;
+    }
+
     if (state.staff.length === 0) {
       showToast('目前名冊中無員工，請先新增人員！', 'warning');
       return;
@@ -2016,12 +2179,15 @@
           return true;
         });
 
-        // Sort by fairness
-        candidates.sort((a, b) => {
-          const countA = shiftCountMap[a.id][shift.id] || 0;
-          const countB = shiftCountMap[b.id][shift.id] || 0;
-          return countA - countB;
-        });
+        // Sort by fairness (balance shifts selected in shiftFairness)
+        const isFairnessShift = state.shiftFairness ? state.shiftFairness.includes(shift.id) : true;
+        if (isFairnessShift) {
+          candidates.sort((a, b) => {
+            const countA = shiftCountMap[a.id][shift.id] || 0;
+            const countB = shiftCountMap[b.id][shift.id] || 0;
+            return countA - countB;
+          });
+        }
 
         for (let i = 0; i < needed && i < candidates.length; i++) {
           const chosen = candidates[i];
@@ -2031,6 +2197,48 @@
           assigned++;
         }
       });
+
+      // 2.1 Enforce Weekday / Weekend minimum headcount requirement
+      const headcountRules = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
+      const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+      let requiredMin = isWeekend ? (headcountRules.weekendMin ?? 2) : (headcountRules.weekdayMin ?? 3);
+      if (headcountRules.customDates) {
+        const customMatch = headcountRules.customDates.find(c => c.date === dateIso);
+        if (customMatch && typeof customMatch.min === 'number') {
+          requiredMin = customMatch.min;
+        }
+      }
+
+      if (workingToday.size < requiredMin) {
+        const remainingStaff = state.staff.filter(staff => {
+          const key = `${staff.id}_${dateIso}`;
+          if (state.schedules[key]) return false;
+          if (workingToday.has(staff.id)) return false;
+          return true;
+        });
+
+        for (const candidate of remainingStaff) {
+          if (workingToday.size >= requiredMin) break;
+
+          const availableShift = workShifts.find(shift => {
+            const restricted = state.roleRestrictions.some(r => r.role === candidate.role && r.shiftId === shift.id);
+            if (restricted) return false;
+            const conflict = state.antiPairs.some(pair => {
+              if (pair[0] === candidate.id && workingToday.has(pair[1])) return true;
+              if (pair[1] === candidate.id && workingToday.has(pair[0])) return true;
+              return false;
+            });
+            if (conflict) return false;
+            return true;
+          });
+
+          if (availableShift) {
+            state.schedules[`${candidate.id}_${dateIso}`] = { shiftId: availableShift.id, otHours: 0 };
+            workingToday.add(candidate.id);
+            shiftCountMap[candidate.id][availableShift.id] = (shiftCountMap[candidate.id][availableShift.id] || 0) + 1;
+          }
+        }
+      }
 
       // 3. For any remaining unassigned staff on this day, assign default off shift
       state.staff.forEach(staff => {
@@ -2684,6 +2892,7 @@
     // View toggling
     const btnViewDay = document.getElementById('view-toggle-day');
     const btnViewStaff = document.getElementById('view-toggle-staff');
+    const btnOpenShiftStats = document.getElementById('btn-open-shift-stats');
     const btnViewWeek = document.getElementById('view-toggle-week');
 
     if (btnViewDay) {
@@ -2697,14 +2906,19 @@
       btnViewStaff.addEventListener('click', () => {
         state.currentView = 'staff';
         renderActiveView();
-        showToast('👤 已切換為人員週期卡模式', 'info');
+        showToast('👤 已切換為當期人員檢視模式', 'info');
+      });
+    }
+    if (btnOpenShiftStats) {
+      btnOpenShiftStats.addEventListener('click', () => {
+        openShiftStatsModal();
       });
     }
     if (btnViewWeek) {
       btnViewWeek.addEventListener('click', () => {
         state.currentView = 'week';
         renderActiveView();
-        showToast('🖥️ 已切換為完整總表格（微縮緊湊排版）', 'info');
+        showToast('🖥️ 已切換為總表（微縮緊湊排版）', 'info');
       });
     }
 
@@ -2997,7 +3211,7 @@
       });
     });
 
-    [elStaffModal, elShiftsModal, elRulesModal, elAutoRulesModal, elHoursModal, elCostModal, elLeavesModal, elExcelModal].forEach(modal => {
+    [elStaffModal, elShiftsModal, elRulesModal, elAutoRulesModal, elHoursModal, elCostModal, elLeavesModal, elExcelModal, elShiftStatsModal].forEach(modal => {
       if (modal) {
         modal.addEventListener('click', (e) => {
           if (e.target === modal) modal.classList.remove('open');
@@ -3195,30 +3409,34 @@
     // CSV / JSON Export (backup all state)
     // ======================================================================
     function doExportJson() {
-      const data = {
-        staff: state.staff,
-        shifts: state.shifts,
-        roles: state.roles,
-        schedules: state.schedules,
-        rules: state.rules,
-        antiPairs: state.antiPairs,
-        roleRestrictions: state.roleRestrictions,
-        shiftFairness: state.shiftFairness,
-        otMultiplier: state.otMultiplier,
-        shiftDisplayLang: state.shiftDisplayLang,
-        exportedAt: new Date().toISOString()
-      };
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `排班備份_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('✅ 已成功匯出 JSON 備份！', 'success');
+      try {
+        const data = {
+          staff: state.staff,
+          shifts: state.shifts,
+          roles: state.roles,
+          schedules: state.schedules,
+          rules: state.rules,
+          antiPairs: state.antiPairs,
+          roleRestrictions: state.roleRestrictions,
+          shiftFairness: state.shiftFairness,
+          otMultiplier: state.otMultiplier,
+          shiftDisplayLang: state.shiftDisplayLang,
+          exportedAt: new Date().toISOString()
+        };
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `排班備份_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('✅ 已成功匯出 JSON 備份！', 'success');
+      } catch (err) {
+        showToast(`❌ 匯出失敗：${err.message || '未知錯誤'}`, 'danger');
+      }
     }
 
     const btnExportCsv = document.getElementById('btn-export-csv');
@@ -3232,6 +3450,7 @@
     const inputImportFile = document.getElementById('input-import-file');
 
     function triggerImport() {
+      if (!confirm('請選擇匯入 JSON 檔才能載入備份，確認繼續？')) return;
       if (inputImportFile) inputImportFile.click();
     }
 

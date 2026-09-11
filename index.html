@@ -198,13 +198,16 @@
       <div class="controls-right-group">
         <div class="view-toggle-group">
           <button id="view-toggle-day" class="view-toggle-btn active" title="手機推薦：直式單日排班卡片">
-            📱 單日卡片
+            📱 單日
           </button>
           <button id="view-toggle-staff" class="view-toggle-btn" title="依同仁個別檢視週期班表">
-            👤 人員週卡
+            👤 當期
+          </button>
+          <button id="btn-open-shift-stats" class="view-toggle-btn" title="統計當期每位同仁各班別出勤次數與累計工時">
+            📊 班數
           </button>
           <button id="view-toggle-week" class="view-toggle-btn" title="完整總表：超緊湊排版">
-            🖥️ 完整總表
+            🖥️ 總表
           </button>
         </div>
 
@@ -394,18 +397,6 @@
           <div style="display:flex;gap:0.45rem;margin-top:0.6rem;">
             <input type="text" id="input-new-role" class="form-control" placeholder="輸入新職稱名稱 (如: 副店長、組長)" style="font-size:0.8rem;padding:0.4rem 0.65rem;">
             <button id="btn-add-role" class="btn btn-secondary" style="font-size:0.8rem;padding:0.4rem 0.75rem;">＋ 新增職稱</button>
-          </div>
-        </div>
-
-        <hr style="border:0;border-top:1px solid var(--border-color);">
-
-        <!-- 加班倍率設定 -->
-        <div class="card-embedded">
-          <span style="font-weight:700;font-size:0.85rem;color:var(--text-primary);">⏰ 加班薪資倍率設定</span>
-          <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.6rem;">
-            <label style="font-size:0.825rem;color:var(--text-secondary);">加班時薪倍率：</label>
-            <input type="number" id="input-overtime-rate" class="form-control" value="1.34" min="1" max="3" step="0.01" style="width:90px;font-size:0.85rem;">
-            <span style="font-size:0.75rem;color:var(--text-muted);">倍 (例：1.34 = 時薪 × 1.34)</span>
           </div>
         </div>
 
@@ -687,28 +678,47 @@
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-auto-rules">&times;</button>
       </div>
       <div class="modal-body">
-        <!-- 整合功能 1: 智慧自動排班快捷啟動卡片 -->
-        <div class="card-embedded" style="background:linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));border:1.5px solid rgba(99, 102, 241, 0.4);margin-bottom:1rem;box-shadow:var(--shadow-sm);">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
-            <div>
-              <h4 style="font-size:0.95rem;font-weight:700;color:var(--text-primary);margin:0;display:flex;align-items:center;gap:0.4rem;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--accent-primary);"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                智慧自動排班
-              </h4>
-              <p style="font-size:0.75rem;color:var(--text-secondary);margin:0.25rem 0 0 0;">
-                依據當前週期需求與下方約束規則，一鍵自動安排最適排班。
-              </p>
-            </div>
-            <button id="btn-quick-run-auto-schedule" class="btn btn-primary" style="font-weight:700;padding:0.45rem 1rem;">
-              ⚡ 立即自動排班
-            </button>
-          </div>
-        </div>
-
         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
           <span style="font-size:0.875rem;font-weight:700;color:var(--text-primary);">📋 排班約束規則設定</span>
           <span style="font-size:0.72rem;color:var(--text-muted);">（自動排班時嚴格遵守）</span>
         </div>
+
+        <!-- Rule: Weekday & Weekend Minimum Headcount -->
+        <div class="card-embedded">
+          <h4 style="font-size:0.875rem;font-weight:700;color:var(--text-primary);margin-bottom:0.4rem;">
+            👥 平日與假日最低人力設定
+          </h4>
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">
+            自動排班時，系統將確保每日出勤同仁數達到此標準，不足時自動補足人力。
+          </p>
+          <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:center;">
+            <div style="display:flex;align-items:center;gap:0.45rem;">
+              <label for="auto-rule-weekday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">平日最低：</label>
+              <input type="number" id="auto-rule-weekday-headcount" class="form-control" value="3" min="0" max="50" style="width:75px;">
+              <span style="font-size:0.75rem;color:var(--text-muted);">人以上</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.45rem;">
+              <label for="auto-rule-holiday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">假日最低：</label>
+              <input type="number" id="auto-rule-holiday-headcount" class="form-control" value="2" min="0" max="50" style="width:75px;">
+              <span style="font-size:0.75rem;color:var(--text-muted);">人以上</span>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border:0;border-top:1px solid var(--border-color);">
+
+        <!-- Rule: Shift Fairness Balancing -->
+        <div class="card-embedded">
+          <h4 style="font-size:0.875rem;font-weight:700;color:var(--text-primary);margin-bottom:0.4rem;">
+            ⚖️ 班別平均分配設定 (選擇要平均分配的班別)
+          </h4>
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">
+            勾選之班別將在自動排班時，由系統盡可能平均分派給所有同仁，確保出勤次數公平。
+          </p>
+          <div id="shift-fairness-toggles-container"></div>
+        </div>
+
+        <hr style="border:0;border-top:1px solid var(--border-color);">
 
         <!-- Rule 1: Anti-pairing -->
         <div class="card-embedded">
@@ -745,7 +755,7 @@
         <!-- Rule 4: Custom Date Shift Headcount Requirement -->
         <div class="card-embedded">
           <h4 style="font-size:0.875rem;font-weight:700;color:var(--text-primary);margin-bottom:0.4rem;">
-            📅 指定時間班別人力需求 (設定特定日期某班別需要幾人)
+            📅 指定時間人力
           </h4>
           <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">
             自動排班時，系統將優先依照此指定日期的班別人數進行排班（未指定則依班別預設目標人數）。
@@ -855,7 +865,7 @@
       <div class="modal-header">
         <h3 id="modal-excel-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          EXCEL / CSV 匯出設定
+          匯出
         </h3>
         <button class="btn btn-icon-only modal-close-btn" data-close="modal-excel-options">&times;</button>
       </div>
@@ -962,8 +972,8 @@
           <button id="btn-save-export-default" class="btn btn-secondary" title="將目前的匯出偏好設定儲存為未來的預設值">
             💾 儲存為預設值
           </button>
-          <button id="btn-export-csv" class="btn btn-secondary" title="匯出 CSV 檔，方便備份或轉移裝置">
-            📄 匯出 CSV 備份
+          <button id="btn-export-csv" class="btn btn-secondary" title="匯出 JSON 備份檔，方便備份或轉移裝置">
+            📄 匯出 JSON
           </button>
         </div>
         <div style="display:flex;gap:0.5rem;">
@@ -973,6 +983,35 @@
           </button>
           <button class="btn btn-secondary modal-close-btn" data-close="modal-excel-options">取消</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       Modal: Shift Stats (班數統計總表)
+       ========================================================================== -->
+  <div id="modal-shift-stats" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-shift-stats-title">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <h3 id="modal-shift-stats-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          班數統計總表
+        </h3>
+        <button class="btn btn-icon-only modal-close-btn" data-close="modal-shift-stats">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:0.85rem;font-size:0.85rem;color:var(--text-secondary);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+          <span id="shift-stats-period-badge" class="date-display-badge" style="font-size:0.8rem;">載入中...</span>
+          <span style="font-size:0.78rem;color:var(--text-muted);">統計當前週期內每位同仁各班別出勤次數與累計工時</span>
+        </div>
+        <div class="schedule-table-wrapper" style="max-height:550px;">
+          <table class="schedule-table" id="table-shift-stats">
+            <!-- Rendered by JS -->
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close-btn" data-close="modal-shift-stats">關閉</button>
       </div>
     </div>
   </div>
