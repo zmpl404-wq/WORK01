@@ -361,6 +361,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       <span>匯出</span>
     </button>
+    <button class="mobile-nav-btn" id="m-btn-print">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      <span>列印</span>
+    </button>
     <button class="mobile-nav-btn" id="m-btn-theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="m-theme-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
       <span>主題</span>
@@ -868,26 +872,38 @@
 
           <!-- 自訂義標題行 -->
           <div class="card-embedded">
-            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">✏️ 自訂義標題列（A1~P1 / A12~P12）</h4>
-            <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">A1~P1 為上半月的合併標題列，A12~P12（位置因員工數而異）為下半月的合併標題列。可自訂文字或留空。</p>
+            <h4 style="font-size:0.875rem;font-weight:700;margin-bottom:0.75rem;">✏️ 自訂義標題列（A1~P1 / A12~P12 / 交叉標題欄）</h4>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">
+              A1~P1 為上半月大標題列，A12~P12 為下半月大標題列。可自由輸入文字；<b>若留空白，EXCEL 將不會合併這列，保持獨立單元格！</b>
+            </p>
             <div class="form-row">
               <div class="form-group">
-                <label for="excel-title-top">上半月標題（合併 A1~P1）</label>
-                <input type="text" id="excel-title-top" class="form-control" placeholder="例：2026年9月份員工排班總表（留空則此列空白）">
+                <label for="excel-title-top">上半月大標題（A1~P1）</label>
+                <input type="text" id="excel-title-top" class="form-control" placeholder="例：2026年9月份員工排班總表（留空則此列不合併）">
               </div>
               <div class="form-group">
-                <label for="excel-title-bottom">下半月標題（合併 A?~P?）</label>
-                <input type="text" id="excel-title-bottom" class="form-control" placeholder="例：2026年9月份員工排班總表（下半月）">
+                <label for="excel-title-bottom">下半月大標題（A12~P12）</label>
+                <input type="text" id="excel-title-bottom" class="form-control" placeholder="例：2026年9月份員工排班總表（下半月）（留空則此列不合併）">
               </div>
             </div>
             <div class="form-row" style="margin-top:0.6rem;">
               <div class="form-group">
-                <label for="excel-header-a2">A2 欄位標題（員工/日期交叉欄）</label>
+                <label for="excel-header-a2">A2 上半月交叉欄（員工/日期）</label>
                 <input type="text" id="excel-header-a2" class="form-control" value="員工 \ 日期" placeholder="可自訂或留空">
               </div>
               <div class="form-group">
-                <label for="excel-header-a3">A3 欄位標題（星期欄）</label>
+                <label for="excel-header-a3">A3 上半月星期欄</label>
                 <input type="text" id="excel-header-a3" class="form-control" value="星期" placeholder="可自訂或留空">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:0.6rem;">
+              <div class="form-group">
+                <label for="excel-header-a13">A13 下半月交叉欄（員工/日期）</label>
+                <input type="text" id="excel-header-a13" class="form-control" value="員工 \ 日期" placeholder="可自訂或留空">
+              </div>
+              <div class="form-group">
+                <label for="excel-header-a14">A14 下半月星期欄</label>
+                <input type="text" id="excel-header-a14" class="form-control" value="星期" placeholder="可自訂或留空">
               </div>
             </div>
           </div>
