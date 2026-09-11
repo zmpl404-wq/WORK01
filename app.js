@@ -1,5 +1,5 @@
 /**
- * ShiftMaster Pro - Core Application Logic (Mobile & Desktop)
+ * ShiftMaster Pro - Core Application Logic (Flex Period & Compact Mobile Table)
  * Modern, Dependency-free Web Scheduling System
  */
 
@@ -31,8 +31,8 @@
     { id: 'staff_7', name: '黃冠宇', role: '計時工讀', wage: 190, maxHours: 20, color: '#14b8a6', offPref: 'none' }
   ];
 
-  // Day Names in Chinese
   const DAY_NAMES_ZH = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+  const DAY_NAMES_SHORT_ZH = ['日', '一', '二', '三', '四', '五', '六'];
 
   // --- App State ---
   let state = {
@@ -40,14 +40,23 @@
     shifts: [],
     // Keyed by `${staffId}_${dateStr}` => shiftId
     schedules: {},
-    currentMonday: getMondayOfDate(new Date()),
-    selectedDayIndex: getTodayDayIndex(), // 0 to 6 (0 = Mon, 6 = Sun)
-    currentView: window.innerWidth <= 768 ? 'day' : 'day', // Default to mobile-friendly day view
-    activeTarget: null // For bottom sheet / popover: { staffId, dateStr }
+    // Flexible Period State
+    periodMode: 'month', // '7days' | '14days' | 'month' | 'custom'
+    periodStart: new Date(),
+    periodEnd: new Date(),
+    selectedDayIndex: 0,
+    currentView: window.innerWidth <= 768 ? 'day' : 'day',
+    activeTarget: null
   };
 
   // --- DOM Elements ---
-  const elDateBadge = document.getElementById('date-display-badge');
+  const elPeriodModeSelect = document.getElementById('period-mode-select');
+  const elCustomDateContainer = document.getElementById('custom-date-range-container');
+  const elInputPeriodStart = document.getElementById('input-period-start');
+  const elInputPeriodEnd = document.getElementById('input-period-end');
+  const elBtnApplyCustomDates = document.getElementById('btn-apply-custom-dates');
+  const elPeriodDisplayBadge = document.getElementById('period-display-badge');
+
   const elDateCarousel = document.getElementById('mobile-date-carousel');
   const elDaySummaryTitle = document.getElementById('day-summary-title');
   const elDaySummaryHeadcount = document.getElementById('day-summary-headcount');
@@ -83,25 +92,92 @@
   const elBtnSheetClear = document.getElementById('btn-sheet-clear');
   const elBtnCloseBottomSheet = document.getElementById('btn-close-bottom-sheet');
 
-  // Desktop Popover & Toast
+  // Desktop Popover & Toast & Modals
   const elShiftPicker = document.getElementById('shift-picker-popover');
   const elToastContainer = document.getElementById('toast-container');
   const elStaffModal = document.getElementById('modal-staff');
   const elShiftsModal = document.getElementById('modal-shifts');
 
   // ==========================================================================
-  // Helper Date Functions
+  // Flexible Period Helper Functions
   // ==========================================================================
-  function getMondayOfDate(d) {
-    const date = new Date(d);
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff));
+  function calculatePeriodRange(mode, anchorDate) {
+    const base = new Date(anchorDate);
+    let start, end;
+
+    if (mode === 'month') {
+      start = new Date(base.getFullYear(), base.getMonth(), 1);
+      end = new Date(base.getFullYear(), base.getMonth() + 1, 0); // Last day of month
+    } else if (mode === '7days') {
+      const day = base.getDay();
+      const diff = base.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      start = new Date(base.setDate(diff));
+      end = new Date(start);
+      end.setDate(start.getDate() + 6); // Sunday
+    } else if (mode === '14days') {
+      const day = base.getDay();
+      const diff = base.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      start = new Date(base.setDate(diff));
+      end = new Date(start);
+      end.setDate(start.getDate() + 13); // 14 days
+    } else {
+      // Keep existing custom dates
+      start = state.periodStart ? new Date(state.periodStart) : new Date();
+      end = state.periodEnd ? new Date(state.periodEnd) : new Date();
+    }
+
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return { start, end };
   }
 
-  function getTodayDayIndex() {
-    const today = new Date().getDay(); // 0 is Sun, 1 is Mon
-    return today === 0 ? 6 : today - 1; // Mon = 0, Sun = 6
+  function getPeriodDays() {
+    const days = [];
+    const current = new Date(state.periodStart);
+    const end = new Date(state.periodEnd);
+
+    // Limit maximum range to 90 days to prevent browser hanging on invalid input
+    let safetyCounter = 0;
+    while (current <= end && safetyCounter < 90) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+      safetyCounter++;
+    }
+    return days;
+  }
+
+  function shiftPeriod(delta) {
+    if (state.periodMode === 'month') {
+      const currentMonth = state.periodStart.getMonth();
+      const targetDate = new Date(state.periodStart);
+      targetDate.setMonth(currentMonth + delta);
+      const range = calculatePeriodRange('month', targetDate);
+      state.periodStart = range.start;
+      state.periodEnd = range.end;
+    } else if (state.periodMode === '7days') {
+      state.periodStart.setDate(state.periodStart.getDate() + delta * 7);
+      state.periodEnd.setDate(state.periodEnd.getDate() + delta * 7);
+    } else if (state.periodMode === '14days') {
+      state.periodStart.setDate(state.periodStart.getDate() + delta * 14);
+      state.periodEnd.setDate(state.periodEnd.getDate() + delta * 14);
+    } else {
+      // Custom shift by duration
+      const daysCount = Math.round((state.periodEnd - state.periodStart) / (1000 * 60 * 60 * 24)) + 1;
+      state.periodStart.setDate(state.periodStart.getDate() + delta * daysCount);
+      state.periodEnd.setDate(state.periodEnd.getDate() + delta * daysCount);
+    }
+
+    // Sync input values
+    elInputPeriodStart.value = formatDateIso(state.periodStart);
+    elInputPeriodEnd.value = formatDateIso(state.periodEnd);
+
+    // Keep selectedDayIndex valid
+    const days = getPeriodDays();
+    if (state.selectedDayIndex >= days.length) {
+      state.selectedDayIndex = 0;
+    }
+
+    renderAll();
   }
 
   function formatDateIso(d) {
@@ -109,24 +185,6 @@
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const date = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${date}`;
-  }
-
-  function getWeekDays(monday) {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      days.push(d);
-    }
-    return days;
-  }
-
-  function getWeekNumber(d) {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
   }
 
   // ==========================================================================
@@ -140,6 +198,7 @@
         state.staff = parsed.staff || DEFAULT_STAFF;
         state.shifts = parsed.shifts || DEFAULT_SHIFTS;
         state.schedules = parsed.schedules || {};
+        state.periodMode = parsed.periodMode || 'month';
       } else {
         initDefaultDemoData();
       }
@@ -147,6 +206,26 @@
       console.warn('Failed to load state, loading defaults:', e);
       initDefaultDemoData();
     }
+
+    // Initialize period dates
+    const range = calculatePeriodRange(state.periodMode, new Date());
+    state.periodStart = range.start;
+    state.periodEnd = range.end;
+
+    elPeriodModeSelect.value = state.periodMode;
+    elInputPeriodStart.value = formatDateIso(state.periodStart);
+    elInputPeriodEnd.value = formatDateIso(state.periodEnd);
+    elCustomDateContainer.style.display = state.periodMode === 'custom' ? 'flex' : 'none';
+
+    // Default select today if in range, otherwise first day
+    findAndSelectToday();
+  }
+
+  function findAndSelectToday() {
+    const days = getPeriodDays();
+    const todayIso = formatDateIso(new Date());
+    const idx = days.findIndex(d => formatDateIso(d) === todayIso);
+    state.selectedDayIndex = idx >= 0 ? idx : 0;
   }
 
   function saveState() {
@@ -154,7 +233,8 @@
       const payload = {
         staff: state.staff,
         shifts: state.shifts,
-        schedules: state.schedules
+        schedules: state.schedules,
+        periodMode: state.periodMode
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -166,8 +246,13 @@
     state.staff = JSON.parse(JSON.stringify(DEFAULT_STAFF));
     state.shifts = JSON.parse(JSON.stringify(DEFAULT_SHIFTS));
     state.schedules = {};
+    state.periodMode = 'month';
 
-    const days = getWeekDays(state.currentMonday);
+    const range = calculatePeriodRange('month', new Date());
+    state.periodStart = range.start;
+    state.periodEnd = range.end;
+
+    const days = getPeriodDays();
     const shiftCycle = [
       ['shift_morning', 'shift_morning', 'shift_morning', 'shift_morning', 'shift_morning', 'shift_off', 'shift_off'],
       ['shift_off', 'shift_middle', 'shift_middle', 'shift_middle', 'shift_middle', 'shift_middle', 'shift_off'],
@@ -182,7 +267,7 @@
       const cycle = shiftCycle[staffIdx % shiftCycle.length];
       days.forEach((d, dayIdx) => {
         const dateStr = formatDateIso(d);
-        const shiftId = cycle[dayIdx];
+        const shiftId = cycle[dayIdx % cycle.length];
         if (shiftId) {
           state.schedules[`${staff.id}_${dateStr}`] = shiftId;
         }
@@ -195,9 +280,9 @@
   // ==========================================================================
   // Calculations & Compliance
   // ==========================================================================
-  function getStaffHoursForWeek(staffId, weekDays) {
+  function getStaffHoursForPeriod(staffId, periodDays) {
     let hours = 0;
-    weekDays.forEach(d => {
+    periodDays.forEach(d => {
       const dateStr = formatDateIso(d);
       const shiftId = state.schedules[`${staffId}_${dateStr}`];
       if (shiftId) {
@@ -210,22 +295,27 @@
     return hours;
   }
 
-  function checkStaffViolations(staffId, weekDays) {
+  function checkStaffViolations(staffId, periodDays) {
     const violations = [];
     const staff = state.staff.find(s => s.id === staffId);
     if (!staff) return violations;
 
-    const totalHours = getStaffHoursForWeek(staffId, weekDays);
-    if (totalHours > staff.maxHours) {
+    const totalHours = getStaffHoursForPeriod(staffId, periodDays);
+    // Pro-rate maxHours based on period length (staff.maxHours is weekly / 7 days)
+    const periodWeeks = periodDays.length / 7;
+    const periodAllowedHours = Math.round(staff.maxHours * periodWeeks);
+
+    if (totalHours > periodAllowedHours) {
       violations.push({
         type: 'overtime',
-        message: `超過每週工時上限：已排 ${totalHours} 小時（上限 ${staff.maxHours}h）`
+        message: `超過此週期工時基準：已排 ${totalHours}h（基準 ${periodAllowedHours}h）`
       });
     }
 
+    // Check consecutive work days (>= 7 continuous days)
     let consecutiveCount = 0;
     let maxConsecutive = 0;
-    weekDays.forEach(d => {
+    periodDays.forEach(d => {
       const dateStr = formatDateIso(d);
       const shiftId = state.schedules[`${staffId}_${dateStr}`];
       const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
@@ -240,7 +330,7 @@
     if (maxConsecutive >= 7) {
       violations.push({
         type: 'consecutive',
-        message: `連續出勤達 ${maxConsecutive} 天，有違反一例一休之虞`
+        message: `連續出勤達 ${maxConsecutive} 天無休，有違反勞基法規定之虞`
       });
     }
 
@@ -265,7 +355,7 @@
   // Master Rendering Router
   // ==========================================================================
   function renderAll() {
-    renderDateBadge();
+    renderPeriodBadge();
     renderActiveView();
     renderAnalytics();
     renderLegend();
@@ -273,21 +363,20 @@
     renderShiftsModalList();
   }
 
-  function renderDateBadge() {
-    const days = getWeekDays(state.currentMonday);
-    const startStr = `${days[0].getMonth() + 1}月${days[0].getDate()}日`;
-    const endStr = `${days[6].getMonth() + 1}月${days[6].getDate()}日`;
-    const weekNum = getWeekNumber(state.currentMonday);
-    elDateBadge.textContent = `${days[0].getFullYear()}年 ${startStr} - ${endStr} (第${weekNum}週)`;
+  function renderPeriodBadge() {
+    const days = getPeriodDays();
+    if (days.length === 0) return;
+    const startStr = `${days[0].getFullYear()}/${days[0].getMonth() + 1}/${days[0].getDate()}`;
+    const lastDay = days[days.length - 1];
+    const endStr = `${lastDay.getFullYear()}/${lastDay.getMonth() + 1}/${lastDay.getDate()}`;
+    elPeriodDisplayBadge.textContent = `${startStr} ~ ${endStr} (共 ${days.length} 天)`;
   }
 
   function renderActiveView() {
-    // Toggle containers
     elContainerDay.style.display = state.currentView === 'day' ? 'flex' : 'none';
     elContainerStaff.style.display = state.currentView === 'staff' ? 'flex' : 'none';
     elContainerTable.style.display = state.currentView === 'week' ? 'flex' : 'none';
 
-    // Update buttons state
     document.getElementById('view-toggle-day').classList.toggle('active', state.currentView === 'day');
     document.getElementById('view-toggle-staff').classList.toggle('active', state.currentView === 'staff');
     document.getElementById('view-toggle-week').classList.toggle('active', state.currentView === 'week');
@@ -303,16 +392,15 @@
   }
 
   // ==========================================================================
-  // VIEW 1: Mobile Day View Rendering (日期輪播 + 同仁大卡片)
+  // VIEW 1: Mobile Day View (日期輪播 + 同仁大卡片)
   // ==========================================================================
   function renderDateCarousel() {
-    const days = getWeekDays(state.currentMonday);
+    const days = getPeriodDays();
     const todayIso = formatDateIso(new Date());
     elDateCarousel.innerHTML = '';
 
     days.forEach((d, idx) => {
       const dateIso = formatDateIso(d);
-      const isToday = dateIso === todayIso;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       const isSelected = idx === state.selectedDayIndex;
       const dayName = DAY_NAMES_ZH[d.getDay()];
@@ -337,16 +425,24 @@
 
       elDateCarousel.appendChild(chip);
     });
+
+    // Auto-scroll active chip into view smoothly
+    const activeChip = elDateCarousel.querySelector('.day-chip.active');
+    if (activeChip) {
+      activeChip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
   }
 
   function renderMobileStaffCards() {
-    const days = getWeekDays(state.currentMonday);
+    const days = getPeriodDays();
+    if (days.length === 0) return;
+
+    if (state.selectedDayIndex >= days.length) state.selectedDayIndex = 0;
     const selectedDate = days[state.selectedDayIndex];
     const dateIso = formatDateIso(selectedDate);
     const dayName = DAY_NAMES_ZH[selectedDate.getDay()];
     const count = getDailyHeadcount(dateIso);
 
-    // Update Day Banner
     elDaySummaryTitle.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
       <span>${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日 (${dayName})</span>
@@ -360,7 +456,6 @@
       </span>
     `;
 
-    // Render Cards
     elMobileStaffCards.innerHTML = '';
     if (state.staff.length === 0) {
       elMobileStaffCards.innerHTML = `
@@ -379,12 +474,10 @@
       const shiftId = state.schedules[key];
       const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
 
-      const weekHours = getStaffHoursForWeek(staff.id, days);
-      const isOvertime = weekHours > staff.maxHours;
+      const periodHours = getStaffHoursForPeriod(staff.id, days);
       const violations = checkStaffViolations(staff.id, days);
       const hasViolation = violations.length > 0;
 
-      // Top Row (Profile & Weekly hours)
       const topRow = document.createElement('div');
       topRow.className = 'mobile-card-top-row';
       topRow.innerHTML = `
@@ -397,16 +490,15 @@
               ${escapeHtml(staff.name)}
               <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
             </span>
-            <span class="mobile-card-meta">週累計 ${weekHours} / ${staff.maxHours}h</span>
+            <span class="mobile-card-meta">本期累計 ${periodHours} 小時</span>
           </div>
         </div>
         <div>
-          ${hasViolation ? `<span class="mobile-alert-tag" title="${violations.map(v => v.message).join('\n')}">⚠️ 警示</span>` : (isOvertime ? '<span class="mobile-alert-tag">⚠️ 超時</span>' : '')}
+          ${hasViolation ? `<span class="mobile-alert-tag" title="${violations.map(v => v.message).join('\n')}">⚠️ 警示</span>` : ''}
         </div>
       `;
       card.appendChild(topRow);
 
-      // Shift Action Button (Big touch button)
       const shiftBtn = document.createElement('button');
       shiftBtn.className = `mobile-shift-action-btn ${shift ? 'has-shift' : 'is-empty'}`;
 
@@ -427,7 +519,7 @@
         shiftBtn.innerHTML = `
           <div class="mobile-shift-btn-left">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span style="font-weight:600;">未排班・點擊指派班別</span>
+            <span style="font-weight:600;">未排班・點擊指派</span>
           </div>
           <div class="mobile-shift-btn-right">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -435,7 +527,6 @@
         `;
       }
 
-      // Tap to open Bottom Sheet
       shiftBtn.addEventListener('click', () => {
         openBottomSheet(staff, dateIso, dayName);
       });
@@ -446,10 +537,10 @@
   }
 
   // ==========================================================================
-  // VIEW 2: Staff Weekly Cards Rendering
+  // VIEW 2: Staff Period Cards Mode
   // ==========================================================================
   function renderStaffWeeklyCards() {
-    const days = getWeekDays(state.currentMonday);
+    const days = getPeriodDays();
     elStaffWeeklyList.innerHTML = '';
 
     if (state.staff.length === 0) {
@@ -465,10 +556,8 @@
       const card = document.createElement('div');
       card.className = 'staff-weekly-card';
 
-      const weekHours = getStaffHoursForWeek(staff.id, days);
-      const isOvertime = weekHours > staff.maxHours;
+      const periodHours = getStaffHoursForPeriod(staff.id, days);
 
-      // Header
       const header = document.createElement('div');
       header.className = 'staff-weekly-card-header';
       header.innerHTML = `
@@ -481,13 +570,12 @@
             <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
           </div>
         </div>
-        <div style="font-size:0.8rem;font-weight:700;${isOvertime ? 'color:var(--accent-danger);' : 'color:var(--text-secondary);'}">
-          ${weekHours} / ${staff.maxHours}h
+        <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);">
+          本期總計 ${periodHours} 小時
         </div>
       `;
       card.appendChild(header);
 
-      // 7 Days Grid
       const grid = document.createElement('div');
       grid.className = 'staff-weekly-days-grid';
 
@@ -504,12 +592,12 @@
           pill.style.backgroundColor = shift.color;
           pill.style.borderColor = 'transparent';
           pill.innerHTML = `
-            <span class="staff-day-pill-name" style="color:rgba(255,255,255,0.8);">${dayName}</span>
+            <span class="staff-day-pill-name" style="color:rgba(255,255,255,0.8);">${dayName.replace('週', '')}</span>
             <span class="staff-day-pill-code" style="color:#ffffff;">${shift.code}</span>
           `;
         } else {
           pill.innerHTML = `
-            <span class="staff-day-pill-name">${dayName}</span>
+            <span class="staff-day-pill-name">${dayName.replace('週', '')}</span>
             <span class="staff-day-pill-code" style="color:var(--text-muted);">-</span>
           `;
         }
@@ -527,34 +615,36 @@
   }
 
   // ==========================================================================
-  // VIEW 3: Desktop Full Table Rendering
+  // VIEW 3: Compact Schedule Table Mode (手機極致微縮排版)
   // ==========================================================================
   function renderTable() {
-    const weekDays = getWeekDays(state.currentMonday);
+    const periodDays = getPeriodDays();
     const todayIso = formatDateIso(new Date());
 
-    elTableHeader.innerHTML = `<th class="col-staff">員工姓名 / 職能角色</th>`;
-    weekDays.forEach(d => {
+    // 1. Table Header
+    elTableHeader.innerHTML = `<th class="col-staff">姓名</th>`;
+    periodDays.forEach(d => {
       const dateIso = formatDateIso(d);
       const isToday = dateIso === todayIso;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-      const dayName = DAY_NAMES_ZH[d.getDay()];
-      const dayFormatted = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      const dayNameShort = DAY_NAMES_SHORT_ZH[d.getDay()];
+      const dayFormatted = `${d.getDate()}`;
 
       const th = document.createElement('th');
       th.className = `day-header-cell ${isToday ? 'is-today' : ''} ${isWeekend ? 'is-weekend' : ''}`;
       th.innerHTML = `
-        <div class="day-name">${dayName}</div>
-        <div class="day-date">${dayFormatted}${isToday ? ' (今日)' : ''}</div>
+        <div class="day-name">${dayNameShort}</div>
+        <div class="day-date">${dayFormatted}</div>
       `;
       elTableHeader.appendChild(th);
     });
 
     const thTotal = document.createElement('th');
     thTotal.className = 'col-total';
-    thTotal.textContent = '週總工時';
+    thTotal.textContent = '工時';
     elTableHeader.appendChild(thTotal);
 
+    // 2. Table Body (Staff Rows)
     elTableBody.innerHTML = '';
     state.staff.forEach(staff => {
       const tr = document.createElement('tr');
@@ -563,25 +653,17 @@
       tdStaff.className = 'staff-row-cell';
       tdStaff.innerHTML = `
         <div class="staff-profile-card">
-          <div class="staff-avatar" style="background:${staff.color || '#6366f1'};">
-            ${staff.name.slice(0, 1)}
-          </div>
-          <div class="staff-info">
-            <div class="staff-name-line">
-              <span class="staff-name">${escapeHtml(staff.name)}</span>
-              <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
-            </div>
-            <span class="staff-sub-meta">時薪 NT$${staff.wage} / 上限 ${staff.maxHours}h</span>
-          </div>
+          <span class="staff-name" title="${escapeHtml(staff.name)} (${escapeHtml(staff.role)})">${escapeHtml(staff.name)}</span>
         </div>
       `;
       tr.appendChild(tdStaff);
 
-      const violations = checkStaffViolations(staff.id, weekDays);
+      const violations = checkStaffViolations(staff.id, periodDays);
       const hasViolation = violations.length > 0;
 
-      weekDays.forEach(d => {
+      periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
+        const dayName = DAY_NAMES_ZH[d.getDay()];
         const cellKey = `${staff.id}_${dateIso}`;
         const shiftId = state.schedules[cellKey];
         const shift = shiftId ? state.shifts.find(s => s.id === shiftId) : null;
@@ -595,9 +677,7 @@
             <div class="shift-pill" style="background:${shift.color};" title="${shift.name} ${shift.start}~${shift.end}">
               <div class="shift-pill-title">
                 <span>${shift.code}</span>
-                <span>${shift.name}</span>
               </div>
-              <div class="shift-pill-time">${shift.start === '-' ? '休息' : shift.start + '-' + shift.end}</div>
             </div>
           `;
         } else {
@@ -610,9 +690,14 @@
           `;
         }
 
+        // On mobile: tap opens Bottom Sheet! On desktop: popover
         slot.addEventListener('click', (e) => {
           e.stopPropagation();
-          openShiftPicker(staff.id, dateIso, slot);
+          if (window.innerWidth <= 768) {
+            openBottomSheet(staff, dateIso, dayName);
+          } else {
+            openShiftPicker(staff.id, dateIso, slot);
+          }
         });
 
         td.appendChild(slot);
@@ -621,32 +706,27 @@
 
       const tdTotal = document.createElement('td');
       tdTotal.className = 'total-cell';
-      const hours = getStaffHoursForWeek(staff.id, weekDays);
-      const isOvertime = hours > staff.maxHours;
-      const pct = Math.min(Math.round((hours / staff.maxHours) * 100), 100);
+      const hours = getStaffHoursForPeriod(staff.id, periodDays);
 
       tdTotal.innerHTML = `
-        <div class="total-hours-num" style="${isOvertime ? 'color:var(--accent-danger);' : ''}">
-          ${hours} <span style="font-size:0.75rem;font-weight:500;">/ ${staff.maxHours}h</span>
-          ${hasViolation ? `<span title="${violations.map(v => v.message).join('\n')}" style="cursor:help;color:var(--accent-danger);font-size:0.85rem;margin-left:2px;">⚠️</span>` : ''}
-        </div>
-        <div class="total-hours-progress-bar">
-          <div class="total-hours-fill ${isOvertime ? 'is-overtime' : ''}" style="width:${pct}%;"></div>
+        <div class="total-hours-num" ${hasViolation ? 'style="color:var(--accent-danger);"' : ''}>
+          ${hours}h
         </div>
       `;
       tr.appendChild(tdTotal);
       elTableBody.appendChild(tr);
     });
 
-    elTableFooter.innerHTML = `<th class="col-staff">各日執勤人數小計</th>`;
-    weekDays.forEach(d => {
+    // 3. Table Footer (Daily headcount totals)
+    elTableFooter.innerHTML = `<th class="col-staff">出勤</th>`;
+    periodDays.forEach(d => {
       const dateIso = formatDateIso(d);
       const count = getDailyHeadcount(dateIso);
       const th = document.createElement('th');
       const isShortage = count < 3;
       th.innerHTML = `
         <span class="headcount-badge ${isShortage ? 'is-shortage' : 'is-sufficient'}">
-          ${count} 人
+          ${count}
         </span>
       `;
       elTableFooter.appendChild(th);
@@ -654,7 +734,7 @@
 
     const thFooterTotal = document.createElement('th');
     thFooterTotal.className = 'col-total';
-    thFooterTotal.textContent = '全週統計';
+    thFooterTotal.textContent = '-';
     elTableFooter.appendChild(thFooterTotal);
   }
 
@@ -670,14 +750,13 @@
       chip.innerHTML = `
         <span class="shift-legend-color-dot" style="background:${shift.color};"></span>
         <span>${shift.name} (${shift.code})</span>
-        <span style="opacity:0.75;font-size:0.7rem;">${shift.hours}h</span>
       `;
       elLegend.appendChild(chip);
     });
   }
 
   function renderAnalytics() {
-    const weekDays = getWeekDays(state.currentMonday);
+    const periodDays = getPeriodDays();
 
     let totalHours = 0;
     let totalShifts = 0;
@@ -686,11 +765,11 @@
     const alertDetails = [];
 
     state.staff.forEach(staff => {
-      const hours = getStaffHoursForWeek(staff.id, weekDays);
+      const hours = getStaffHoursForPeriod(staff.id, periodDays);
       totalHours += hours;
       totalCost += hours * (staff.wage || 0);
 
-      weekDays.forEach(d => {
+      periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
         const shiftId = state.schedules[`${staff.id}_${dateIso}`];
         if (shiftId) {
@@ -701,7 +780,7 @@
         }
       });
 
-      const violations = checkStaffViolations(staff.id, weekDays);
+      const violations = checkStaffViolations(staff.id, periodDays);
       if (violations.length > 0) {
         alertCount += violations.length;
         violations.forEach(v => alertDetails.push(`${staff.name}: ${v.message}`));
@@ -710,10 +789,10 @@
 
     const avgHours = state.staff.length > 0 ? (totalHours / state.staff.length).toFixed(1) : 0;
     elStatHours.innerHTML = `${totalHours} <span style="font-size:0.85rem;font-weight:500;">小時</span>`;
-    elStatAvgHours.textContent = `人均工時：${avgHours} 小時 / 週`;
+    elStatAvgHours.textContent = `人均工時：${avgHours} 小時 / 期`;
 
     elStatShifts.innerHTML = `${totalShifts} <span style="font-size:0.85rem;font-weight:500;">班次</span>`;
-    const coverageRate = Math.min(Math.round((totalShifts / (weekDays.length * 4)) * 100), 100);
+    const coverageRate = Math.min(Math.round((totalShifts / (periodDays.length * 4)) * 100), 100);
     elStatCoverage.textContent = `在崗覆蓋率：${coverageRate}%`;
 
     elStatCost.textContent = `NT$ ${totalCost.toLocaleString()}`;
@@ -728,13 +807,13 @@
   }
 
   // ==========================================================================
-  // Mobile Touch-Friendly Bottom Sheet (大觸控面積班別抽屜)
+  // Mobile Bottom Sheet
   // ==========================================================================
   function openBottomSheet(staff, dateStr, dayName) {
     state.activeTarget = { staffId: staff.id, dateStr };
 
     elBottomSheetTitle.textContent = `指派班別：${staff.name}`;
-    elBottomSheetSubtitle.textContent = `日期：${dateStr} (${dayName}) ・ 職能：${staff.role}`;
+    elBottomSheetSubtitle.textContent = `日期：${dateStr} (${dayName}) ・ 職稱：${staff.role}`;
 
     elDrawerShiftsList.innerHTML = '';
     const workShifts = state.shifts.filter(s => s.id !== 'shift_off');
@@ -746,7 +825,7 @@
       item.style.backgroundColor = shift.color;
       item.innerHTML = `
         <div class="drawer-shift-title">
-          <span style="padding:0.1rem 0.4rem;background:rgba(0,0,0,0.25);border-radius:4px;font-size:0.8rem;">${shift.code}</span>
+          <span style="padding:0.1rem 0.45rem;background:rgba(0,0,0,0.25);border-radius:4px;font-size:0.85rem;">${shift.code}</span>
           <span>${shift.name}</span>
         </div>
         <div class="drawer-shift-time">
@@ -770,9 +849,6 @@
     state.activeTarget = null;
   }
 
-  // ==========================================================================
-  // Quick Shift Picker Popover (Desktop Table)
-  // ==========================================================================
   function openShiftPicker(staffId, dateStr, anchorEl) {
     elShiftPicker.innerHTML = '';
 
@@ -827,7 +903,7 @@
   }
 
   // ==========================================================================
-  // Smart Auto-Scheduler Algorithm
+  // Smart Auto-Scheduler (Supports Arbitrary Period Length)
   // ==========================================================================
   function runAutoScheduler() {
     if (state.staff.length === 0) {
@@ -835,7 +911,7 @@
       return;
     }
 
-    const weekDays = getWeekDays(state.currentMonday);
+    const periodDays = getPeriodDays();
     const staffHoursTracker = {};
     const staffConsecutiveWork = {};
     state.staff.forEach(s => {
@@ -849,20 +925,25 @@
       return;
     }
 
-    weekDays.forEach(d => {
+    const periodWeeks = periodDays.length / 7;
+
+    periodDays.forEach(d => {
       const dateStr = formatDateIso(d);
       const dayOfWeek = String(d.getDay());
 
       const availableStaff = state.staff.filter(s => {
         if (s.offPref === dayOfWeek) return false;
-        if (staffHoursTracker[s.id] >= s.maxHours) return false;
+        const allowed = Math.round(s.maxHours * periodWeeks);
+        if (staffHoursTracker[s.id] >= allowed) return false;
         if (staffConsecutiveWork[s.id] >= 6) return false;
         return true;
       });
 
       availableStaff.sort((a, b) => {
-        const remA = a.maxHours - staffHoursTracker[a.id];
-        const remB = b.maxHours - staffHoursTracker[b.id];
+        const allowedA = Math.round(a.maxHours * periodWeeks);
+        const allowedB = Math.round(b.maxHours * periodWeeks);
+        const remA = allowedA - staffHoursTracker[a.id];
+        const remB = allowedB - staffHoursTracker[b.id];
         return remB - remA;
       });
 
@@ -872,7 +953,8 @@
         for (let i = 0; i < need; i++) {
           if (staffPointer < availableStaff.length) {
             const chosenStaff = availableStaff[staffPointer];
-            if (staffHoursTracker[chosenStaff.id] + shift.hours <= chosenStaff.maxHours + 4) {
+            const allowed = Math.round(chosenStaff.maxHours * periodWeeks);
+            if (staffHoursTracker[chosenStaff.id] + shift.hours <= allowed + 4) {
               state.schedules[`${chosenStaff.id}_${dateStr}`] = shift.id;
               staffHoursTracker[chosenStaff.id] += shift.hours;
               staffConsecutiveWork[chosenStaff.id] += 1;
@@ -893,7 +975,7 @@
 
     saveState();
     renderAll();
-    showToast('✨ 智慧自動排班完成！已公平分配時數並兼顧休假限制', 'success');
+    showToast(`✨ 智慧排班完成！已依據 ${periodDays.length} 天週期均衡分配`, 'success');
   }
 
   // ==========================================================================
@@ -928,7 +1010,7 @@
               <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted);">
-              時薪 NT$${staff.wage} ・ 週上限 ${staff.maxHours}h ・ 偏好休 ${offText}
+              時薪 NT$${staff.wage} ・ 週基準 ${staff.maxHours}h ・ 偏好休 ${offText}
             </div>
           </div>
         </div>
@@ -975,7 +1057,7 @@
               ${escapeHtml(shift.name)} (${shift.code})
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted);">
-              ${shift.start} ~ ${shift.end} ・ 計薪 ${shift.hours}h ・ 每日目標 ${shift.targetStaff} 人
+              ${shift.start} ~ ${shift.end} ・ 計薪 ${shift.hours}h ・ 目標 ${shift.targetStaff} 人
             </div>
           </div>
         </div>
@@ -1008,18 +1090,18 @@
   // CSV Export Engine
   // ==========================================================================
   function exportScheduleToCSV() {
-    const weekDays = getWeekDays(state.currentMonday);
+    const periodDays = getPeriodDays();
     let csv = '\uFEFF';
 
-    const headers = ['員工姓名', '職稱', '時薪', '每週工時上限'];
-    weekDays.forEach(d => {
+    const headers = ['員工姓名', '職稱', '時薪', '每週工時基準'];
+    periodDays.forEach(d => {
       headers.push(`${DAY_NAMES_ZH[d.getDay()]} (${d.getMonth() + 1}/${d.getDate()})`);
     });
-    headers.push('當週總工時', '預估工資薪資');
+    headers.push('當期總工時', '預估薪資支出');
     csv += headers.map(h => `"${h}"`).join(',') + '\r\n';
 
     state.staff.forEach(staff => {
-      const hours = getStaffHoursForWeek(staff.id, weekDays);
+      const hours = getStaffHoursForPeriod(staff.id, periodDays);
       const cost = hours * (staff.wage || 0);
 
       const row = [
@@ -1029,7 +1111,7 @@
         `${staff.maxHours} 小時`
       ];
 
-      weekDays.forEach(d => {
+      periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
         const shiftId = state.schedules[`${staff.id}_${dateIso}`];
         if (shiftId) {
@@ -1047,7 +1129,7 @@
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const startStr = formatDateIso(weekDays[0]);
+    const startStr = formatDateIso(periodDays[0]);
     a.href = url;
     a.download = `ShiftMaster_班表_${startStr}.csv`;
     document.body.appendChild(a);
@@ -1091,20 +1173,62 @@
   // Event Listeners & Binding
   // ==========================================================================
   function setupEventListeners() {
-    // Week navigation
-    document.getElementById('btn-prev-week').addEventListener('click', () => {
-      state.currentMonday.setDate(state.currentMonday.getDate() - 7);
-      renderAll();
+    // Period Mode Change
+    elPeriodModeSelect.addEventListener('change', (e) => {
+      state.periodMode = e.target.value;
+      saveState();
+
+      if (state.periodMode === 'custom') {
+        elCustomDateContainer.style.display = 'flex';
+      } else {
+        elCustomDateContainer.style.display = 'none';
+        const range = calculatePeriodRange(state.periodMode, new Date());
+        state.periodStart = range.start;
+        state.periodEnd = range.end;
+        elInputPeriodStart.value = formatDateIso(state.periodStart);
+        elInputPeriodEnd.value = formatDateIso(state.periodEnd);
+        findAndSelectToday();
+        renderAll();
+      }
     });
 
-    document.getElementById('btn-next-week').addEventListener('click', () => {
-      state.currentMonday.setDate(state.currentMonday.getDate() + 7);
+    // Custom Date Apply Button
+    elBtnApplyCustomDates.addEventListener('click', () => {
+      const sVal = elInputPeriodStart.value;
+      const eVal = elInputPeriodEnd.value;
+      if (!sVal || !eVal) {
+        showToast('請選擇開始與結束日期', 'warning');
+        return;
+      }
+      const sDate = new Date(sVal);
+      const eDate = new Date(eVal);
+      if (sDate > eDate) {
+        showToast('開始日期不得晚於結束日期', 'warning');
+        return;
+      }
+      state.periodStart = sDate;
+      state.periodEnd = eDate;
+      findAndSelectToday();
       renderAll();
+      showToast('已套用自訂排班週期！', 'success');
     });
 
-    document.getElementById('btn-current-week').addEventListener('click', () => {
-      state.currentMonday = getMondayOfDate(new Date());
-      state.selectedDayIndex = getTodayDayIndex();
+    // Prev / Next Period
+    document.getElementById('btn-prev-period').addEventListener('click', () => {
+      shiftPeriod(-1);
+    });
+
+    document.getElementById('btn-next-period').addEventListener('click', () => {
+      shiftPeriod(1);
+    });
+
+    document.getElementById('btn-current-period').addEventListener('click', () => {
+      const range = calculatePeriodRange(state.periodMode, new Date());
+      state.periodStart = range.start;
+      state.periodEnd = range.end;
+      elInputPeriodStart.value = formatDateIso(state.periodStart);
+      elInputPeriodEnd.value = formatDateIso(state.periodEnd);
+      findAndSelectToday();
       renderAll();
     });
 
@@ -1118,28 +1242,28 @@
     document.getElementById('view-toggle-staff').addEventListener('click', () => {
       state.currentView = 'staff';
       renderActiveView();
-      showToast('👤 已切換為人員週卡模式', 'info');
+      showToast('👤 已切換為人員週期卡模式', 'info');
     });
 
     document.getElementById('view-toggle-week').addEventListener('click', () => {
       state.currentView = 'week';
       renderActiveView();
-      showToast('🖥️ 已切換為完整總表格', 'info');
+      showToast('🖥️ 已切換為完整總表格（微縮緊湊排版）', 'info');
     });
 
-    // Clear Week
+    // Clear Period
     document.getElementById('btn-clear-week').addEventListener('click', () => {
-      if (confirm('確定要清空當週的所有排班嗎？（人員與班別設定將會保留）')) {
-        const weekDays = getWeekDays(state.currentMonday);
+      if (confirm('確定要清空當前週期內的所有排班嗎？（人員與班別設定將會保留）')) {
+        const periodDays = getPeriodDays();
         state.staff.forEach(s => {
-          weekDays.forEach(d => {
+          periodDays.forEach(d => {
             const dateIso = formatDateIso(d);
             delete state.schedules[`${s.id}_${dateIso}`];
           });
         });
         saveState();
         renderAll();
-        showToast('已清空當週所有排班紀錄', 'warning');
+        showToast('已清空當前週期所有排班紀錄', 'warning');
       }
     });
 
