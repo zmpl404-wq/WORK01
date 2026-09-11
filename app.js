@@ -31,7 +31,7 @@
     { id: 'shift_evening', name: '晚班', code: '晚', enCode: 'E', start: '16:00', end: '00:30', hours: 8, color: '#8b5cf6', textColor: '#ffffff', bgTransparent: false, targetStaff: 2, isLeave: false },
     { id: 'shift_night', name: '大夜班', code: '夜', enCode: 'N', start: '00:00', end: '08:30', hours: 8, color: '#3b82f6', textColor: '#ffffff', bgTransparent: false, targetStaff: 1, isLeave: false },
     { id: 'shift_parttime', name: '支援短班', code: '短', enCode: 'P', start: '18:00', end: '22:00', hours: 4, color: '#06b6d4', textColor: '#ffffff', bgTransparent: false, targetStaff: 1, isLeave: false },
-    { id: 'shift_off', name: '例休', code: '休', enCode: 'O', start: '-', end: '-', hours: 0, color: '#64748b', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true },
+    { id: 'shift_off', name: '休假', code: '休', enCode: '休', start: '00:00', end: '00:00', hours: 0, color: '#ffffff', textColor: '#ef4444', bgTransparent: true, targetStaff: 0, isLeave: true },
     { id: 'shift_personal', name: '事假', code: '事', enCode: 'L', start: '-', end: '-', hours: 0, color: '#f97316', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true },
     { id: 'shift_sick', name: '病假', code: '病', enCode: 'S', start: '-', end: '-', hours: 0, color: '#ef4444', textColor: '#ffffff', bgTransparent: false, targetStaff: 0, isLeave: true }
   ];
@@ -274,11 +274,31 @@
         state.antiPairs = parsed.antiPairs || [];
         state.roleRestrictions = parsed.roleRestrictions || [];
         state.shiftFairness = parsed.shiftFairness || ['shift_morning', 'shift_evening', 'shift_middle'];
+        state.customShiftRequirements = parsed.customShiftRequirements || [];
 
         // Normalize staff with default leaveQuota
         state.staff.forEach(s => {
           if (typeof s.leaveQuota !== 'number') s.leaveQuota = 8;
         });
+
+        // Ensure default 'shift_off' is configured as specified
+        let offShift = state.shifts.find(s => s.id === 'shift_off');
+        if (!offShift) {
+          offShift = { id: 'shift_off', name: '休假', code: '休', enCode: '休', start: '00:00', end: '00:00', hours: 0, color: '#ffffff', textColor: '#ef4444', bgTransparent: true, targetStaff: 0, isLeave: true };
+          state.shifts.push(offShift);
+        } else if (offShift.name === '例休') {
+          offShift.name = '休假';
+          offShift.code = '休';
+          offShift.enCode = '休';
+          offShift.start = '00:00';
+          offShift.end = '00:00';
+          offShift.hours = 0;
+          offShift.targetStaff = 0;
+          offShift.color = '#ffffff';
+          offShift.textColor = '#ef4444';
+          offShift.bgTransparent = true;
+          offShift.isLeave = true;
+        }
 
         // Normalize shifts: ensure isLeave flag, textColor, bgTransparent, and 1-char codes
         state.shifts.forEach(s => {
@@ -288,7 +308,7 @@
           if (!s.textColor) s.textColor = '#ffffff';
           if (typeof s.bgTransparent !== 'boolean') s.bgTransparent = false;
           if (s.code) s.code = s.code.slice(0, 1);
-          if (s.enCode) s.enCode = s.enCode.slice(0, 1).toUpperCase();
+          if (s.enCode) s.enCode = s.enCode.slice(0, 1);
         });
       } else {
         initDefaultDemoData();
@@ -331,7 +351,8 @@
         rules: state.rules,
         antiPairs: state.antiPairs,
         roleRestrictions: state.roleRestrictions,
-        shiftFairness: state.shiftFairness
+        shiftFairness: state.shiftFairness,
+        customShiftRequirements: state.customShiftRequirements || []
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -778,7 +799,7 @@
       const header = document.createElement('div');
       header.className = 'staff-weekly-card-header';
 
-      // Build shift count summary
+      // Build shift count summary (respects Chinese/English toggle)
       const shiftCounts = {};
       days.forEach(d => {
         const dateIso = formatDateIso(d);
@@ -786,12 +807,13 @@
         if (entry && entry.shiftId) {
           const shift = state.shifts.find(s => s.id === entry.shiftId);
           if (shift) {
-            shiftCounts[shift.code] = (shiftCounts[shift.code] || 0) + 1;
+            const code = getShiftDisplayShort(shift);
+            shiftCounts[code] = (shiftCounts[code] || 0) + 1;
           }
         }
       });
       const summaryParts = Object.entries(shiftCounts).map(([code, count]) => `${code}:${count}`);
-      summaryParts.push(`工時:${breakdown.totalHours}H`);
+      summaryParts.push(`時數:${breakdown.totalHours}H`);
       const summaryText = summaryParts.join(' ');
 
       header.innerHTML = `
@@ -1015,13 +1037,17 @@
     state.shifts.forEach(shift => {
       const chip = document.createElement('div');
       chip.className = 'legend-chip';
-      const shortCode = getShiftDisplayShort(shift);
-      const displayTitle = getShiftDisplayTitle(shift);
+      const code = state.shiftDisplayLang === 'en'
+        ? (shift.enCode || shift.code || '')
+        : (shift.code || shift.name || '');
+      const timeText = (shift.start && shift.end && shift.start !== '-')
+        ? `${shift.start} ~ ${shift.end}`
+        : (shift.start || '-');
 
       chip.innerHTML = `
         <span class="legend-color-dot" style="background:${shift.color};"></span>
-        <span class="legend-name">${escapeHtml(displayTitle)}</span>
-        <span class="legend-hours">${shift.hours > 0 ? `${shift.hours}h` : '休'}</span>
+        <span class="legend-name">${escapeHtml(shift.name)} [${escapeHtml(code)}]</span>
+        <span class="legend-time" style="font-size:0.75rem;color:var(--text-muted);">${escapeHtml(timeText)}</span>
       `;
       elLegend.appendChild(chip);
     });
@@ -1292,7 +1318,7 @@
   }
 
   // ==========================================================================
-  // Staff Hours Breakdown Modal (個別員工工時明細)
+  // Staff Hours Breakdown Modal (工時明細與時數上限設定)
   // ==========================================================================
   function openHoursModal() {
     if (!elHoursModal) return;
@@ -1304,17 +1330,28 @@
     const periodDays = getPeriodDays();
 
     let html = `
-      <div style="overflow-x:auto;">
+      <!-- 一鍵套用全員自訂義工時 -->
+      <div class="card-embedded" style="margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+          <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+            <span style="font-size:0.85rem;font-weight:700;">自訂時數上限：</span>
+            <input type="number" id="input-batch-hours-limit" class="form-control" value="160" min="0" max="999" style="width:80px;">
+            <span style="font-size:0.75rem;color:var(--text-muted);">小時</span>
+          </div>
+          <button id="btn-apply-batch-hours-limit" class="btn btn-secondary" style="font-size:0.8rem;">一鍵套用全員自訂義工時</button>
+        </div>
+      </div>
+
+      <div class="horizontal-scroll-table-wrapper">
         <table class="detail-table">
           <thead>
             <tr>
               <th>姓名</th>
-              <th>職稱</th>
-              <th>當期允許上限</th>
-              <th>一般工時</th>
-              <th>加班工時</th>
-              <th>當期總工時</th>
-              <th>狀態</th>
+              <th>時數上限</th>
+              <th>時數</th>
+              <th>加班</th>
+              <th>總時數</th>
+              <th>檢核</th>
               <th>調整上限</th>
             </tr>
           </thead>
@@ -1329,14 +1366,13 @@
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
-          <td><span class="staff-role-badge">${escapeHtml(staff.role)}</span></td>
           <td>${Math.round(allowed)}h</td>
           <td>${breakdown.normalHours}h</td>
-          <td style="color:#f59e0b;font-weight:700;">+${breakdown.otHours}h</td>
+          <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours > 0 ? `+${breakdown.otHours}h` : '0h'}</td>
           <td style="font-weight:800;font-size:0.95rem;">${breakdown.totalHours}h</td>
           <td>
             <span class="headcount-status-badge ${isOver ? 'status-shortage' : 'status-ok'}">
-              ${isOver ? '工時超標' : '正常合規'}
+              ${isOver ? '異常' : '正常'}
             </span>
           </td>
           <td>
@@ -1358,6 +1394,20 @@
 
     content.innerHTML = html;
 
+    // Batch apply button
+    const btnBatch = document.getElementById('btn-apply-batch-hours-limit');
+    if (btnBatch) {
+      btnBatch.addEventListener('click', () => {
+        const inp = document.getElementById('input-batch-hours-limit');
+        const val = parseFloat(inp ? inp.value : 160) || 0;
+        state.staff.forEach(s => { s.periodMaxHours = val; });
+        saveState();
+        openHoursModal();
+        renderKPIDashboard();
+        showToast(`已一鍵將全員時數上限設定為 ${val} 小時！`, 'success');
+      });
+    }
+
     // Bind save limit buttons
     content.querySelectorAll('.btn-save-hours-limit').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1369,7 +1419,8 @@
             staff.periodMaxHours = parseFloat(input.value) || 0;
             saveState();
             renderKPIDashboard();
-            showToast(`已更新 ${staff.name} 當期工時上限為 ${staff.periodMaxHours} h`, 'success');
+            showToast(`已更新 ${staff.name} 時數上限為 ${staff.periodMaxHours} h`, 'success');
+            openHoursModal();
           }
         }
       });
@@ -1377,7 +1428,7 @@
   }
 
   // ==========================================================================
-  // Staff Cost & Overtime Multiplier Modal (預估薪資支出細項)
+  // Staff Cost & Overtime Multiplier Modal (薪資明細)
   // ==========================================================================
   function openCostModal() {
     if (!elCostModal) return;
@@ -1390,6 +1441,8 @@
     if (!content) return;
 
     const periodDays = getPeriodDays();
+    let sumNormalHours = 0;
+    let sumOtHours = 0;
     let sumNormalCost = 0;
     let sumOtCost = 0;
     let sumTotalCost = 0;
@@ -1404,18 +1457,17 @@
         <button id="btn-apply-modal-ot-rate" class="btn btn-primary" style="font-size:0.8rem;padding:0.4rem 0.8rem;">更新計算</button>
       </div>
 
-      <div style="overflow-x:auto;">
+      <div class="horizontal-scroll-table-wrapper">
         <table class="detail-table">
           <thead>
             <tr>
               <th>姓名</th>
-              <th>職稱</th>
               <th>時薪</th>
-              <th>一般工時</th>
-              <th>一般薪資</th>
-              <th>加班工時</th>
-              <th>加班薪資 (${state.otMultiplier}倍)</th>
-              <th>預估總薪資</th>
+              <th>時數</th>
+              <th>薪資</th>
+              <th>加班</th>
+              <th>加班費</th>
+              <th>總薪資</th>
             </tr>
           </thead>
           <tbody>
@@ -1427,6 +1479,8 @@
       const otPay = Math.round(breakdown.otHours * staff.wage * state.otMultiplier);
       const totalPay = normalPay + otPay;
 
+      sumNormalHours += breakdown.normalHours;
+      sumOtHours += breakdown.otHours;
       sumNormalCost += normalPay;
       sumOtCost += otPay;
       sumTotalCost += totalPay;
@@ -1434,11 +1488,10 @@
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
-          <td><span class="staff-role-badge">${escapeHtml(staff.role)}</span></td>
           <td>NT$ ${staff.wage}</td>
           <td>${breakdown.normalHours}h</td>
           <td>NT$ ${normalPay.toLocaleString()}</td>
-          <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours}h</td>
+          <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours > 0 ? `${breakdown.otHours}h` : '0h'}</td>
           <td style="color:#f59e0b;">NT$ ${otPay.toLocaleString()}</td>
           <td style="font-weight:800;color:var(--accent-primary);font-size:0.95rem;">NT$ ${totalPay.toLocaleString()}</td>
         </tr>
@@ -1449,9 +1502,11 @@
           </tbody>
           <tfoot>
             <tr style="background:var(--bg-subtle);font-weight:800;">
-              <td colspan="4" style="text-align:right;">全體合計：</td>
-              <td>NT$ ${sumNormalCost.toLocaleString()}</td>
+              <td>全體合計</td>
               <td>-</td>
+              <td>${sumNormalHours}h</td>
+              <td>NT$ ${sumNormalCost.toLocaleString()}</td>
+              <td style="color:#f59e0b;">${sumOtHours > 0 ? `+${sumOtHours}h` : '0h'}</td>
               <td style="color:#f59e0b;">NT$ ${sumOtCost.toLocaleString()}</td>
               <td style="color:var(--accent-primary);font-size:1.05rem;">NT$ ${sumTotalCost.toLocaleString()}</td>
             </tr>
@@ -1496,12 +1551,11 @@
     const periodDays = getPeriodDays();
 
     let html = `
-      <div style="overflow-x:auto;">
+      <div class="horizontal-scroll-table-wrapper">
         <table class="detail-table">
           <thead>
             <tr>
               <th>姓名</th>
-              <th>職稱</th>
               <th>應休</th>
               <th>已排休</th>
               <th>未休</th>
@@ -1532,7 +1586,6 @@
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
-          <td><span class="staff-role-badge">${escapeHtml(staff.role)}</span></td>
           <td>
             <input type="number" class="leave-quota-input" data-staff-id="${staff.id}" value="${quota}" min="0" max="31">
           </td>
@@ -1838,6 +1891,52 @@
       });
       fairnessContainer.appendChild(grid);
     }
+
+    // Rule 4: Custom Date Shift Requirements
+    const selCustomShift = document.getElementById('select-custom-req-shift');
+    const inpCustomDate = document.getElementById('input-custom-req-date');
+    const listCustomReq = document.getElementById('custom-req-list-container');
+
+    if (selCustomShift) {
+      selCustomShift.innerHTML = '';
+      const workShifts = state.shifts.filter(s => s.id !== 'shift_off');
+      workShifts.forEach(sh => {
+        const opt = document.createElement('option');
+        opt.value = sh.id;
+        opt.textContent = `${sh.name} (${sh.code})`;
+        selCustomShift.appendChild(opt);
+      });
+    }
+    if (inpCustomDate && !inpCustomDate.value) {
+      inpCustomDate.value = formatDateIso(state.periodStart || new Date());
+    }
+
+    if (listCustomReq) {
+      listCustomReq.innerHTML = '';
+      state.customShiftRequirements = state.customShiftRequirements || [];
+      if (state.customShiftRequirements.length === 0) {
+        listCustomReq.innerHTML = '<span style="font-size:0.75rem;color:var(--text-muted);">尚未設定指定時間班別需求（將依各班別預設需求排班）</span>';
+      } else {
+        state.customShiftRequirements.forEach((item, idx) => {
+          const shift = state.shifts.find(s => s.id === item.shiftId);
+          const shiftName = shift ? shift.name : '已刪除班別';
+
+          const tag = document.createElement('div');
+          tag.className = 'rule-tag-item';
+          tag.innerHTML = `
+            <span>📅 <b>${escapeHtml(item.date)}</b> 的 <b>${escapeHtml(shiftName)}</b> 需求：<b>${item.count}</b> 人</span>
+            <button type="button" class="btn-del-rule" title="移除此需求">&times;</button>
+          `;
+          tag.querySelector('.btn-del-rule').addEventListener('click', () => {
+            state.customShiftRequirements.splice(idx, 1);
+            saveState();
+            renderAutoRulesModalUI();
+            showToast('已移除指定時間班別人力需求', 'info');
+          });
+          listCustomReq.appendChild(tag);
+        });
+      }
+    }
   }
 
   // ==========================================================================
@@ -1886,7 +1985,14 @@
 
       // 2. For each work shift, assign staff
       workShifts.forEach(shift => {
-        const needed = shift.targetStaff || 1;
+        let needed = shift.targetStaff || 1;
+        if (state.customShiftRequirements) {
+          const customReq = state.customShiftRequirements.find(r => r.date === dateIso && r.shiftId === shift.id);
+          if (customReq && typeof customReq.count === 'number') {
+            needed = customReq.count;
+          }
+        }
+        if (needed <= 0) return;
         let assigned = 0;
 
         // Candidate filtering
@@ -1926,11 +2032,12 @@
         }
       });
 
-      // 3. For any remaining unassigned staff on this day, assign off if needed
+      // 3. For any remaining unassigned staff on this day, assign default off shift
       state.staff.forEach(staff => {
         const key = `${staff.id}_${dateIso}`;
         if (!state.schedules[key]) {
-          state.schedules[key] = { shiftId: 'shift_off', otHours: 0 };
+          const defaultOffShift = state.shifts.find(s => s.id === 'shift_off') || state.shifts.find(s => s.isLeave) || { id: 'shift_off' };
+          state.schedules[key] = { shiftId: defaultOffShift.id, otHours: 0 };
         }
       });
     });
@@ -2077,12 +2184,14 @@
           </div>
         </div>
         <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
-          <button class="btn btn-icon-only btn-edit-shift" data-id="${shift.id}" title="編輯班別" style="color:var(--accent-primary);">
+          <button class="btn btn-icon-only btn-edit-shift" data-id="${shift.id}" title="${shift.id === 'shift_off' ? '編輯顏色與代碼' : '編輯班別'}" style="color:var(--accent-primary);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           </button>
-          <button class="btn btn-icon-only btn-delete-shift" data-id="${shift.id}" title="移除班別" style="color:var(--accent-danger);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
+          ${shift.id === 'shift_off' ? '' : `
+            <button class="btn btn-icon-only btn-delete-shift" data-id="${shift.id}" title="移除班別" style="color:var(--accent-danger);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          `}
         </div>
       `;
 
@@ -2115,10 +2224,20 @@
           if (targetEl) targetEl.value = shift.targetStaff;
           if (isLeaveEl) isLeaveEl.checked = !!shift.isLeave;
 
+          // For shift_off: only allow editing color and enCode
+          const isShiftOff = shift.id === 'shift_off';
+          if (nameEl) nameEl.disabled = isShiftOff;
+          if (codeEl) codeEl.disabled = isShiftOff;
+          if (startEl) startEl.disabled = isShiftOff;
+          if (endEl) endEl.disabled = isShiftOff;
+          if (hoursEl) hoursEl.disabled = isShiftOff;
+          if (targetEl) targetEl.disabled = isShiftOff;
+          if (isLeaveEl) isLeaveEl.disabled = isShiftOff;
+
           // Mark form as editing this shift
           const form = document.getElementById('form-add-shift');
           if (form) form.dataset.editId = shift.id;
-          if (saveBtn) saveBtn.textContent = '更新班別';
+          if (saveBtn) saveBtn.textContent = isShiftOff ? '更新休假班別 (僅色彩/英文代碼)' : '更新班別';
 
           // Scroll form into view
           if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2690,6 +2809,36 @@
       });
     }
 
+    // Add Custom Date Shift Headcount Requirement
+    const btnAddCustomReq = document.getElementById('btn-add-custom-req');
+    if (btnAddCustomReq) {
+      btnAddCustomReq.addEventListener('click', () => {
+        const date = document.getElementById('input-custom-req-date').value;
+        const shiftId = document.getElementById('select-custom-req-shift').value;
+        const count = parseInt(document.getElementById('input-custom-req-count').value, 10);
+        if (!date || !shiftId) {
+          showToast('請選擇日期與班別！', 'warning');
+          return;
+        }
+        if (isNaN(count) || count < 0) {
+          showToast('請輸入有效的人數！', 'warning');
+          return;
+        }
+        state.customShiftRequirements = state.customShiftRequirements || [];
+        const existing = state.customShiftRequirements.find(r => r.date === date && r.shiftId === shiftId);
+        if (existing) {
+          existing.count = count;
+        } else {
+          state.customShiftRequirements.push({ id: `req_${Date.now()}`, date, shiftId, count });
+        }
+        saveState();
+        renderAutoRulesModalUI();
+        const shift = state.shifts.find(s => s.id === shiftId);
+        const shiftName = shift ? shift.name : '';
+        showToast(`已設定 ${date} ${shiftName} 人力需求為 ${count} 人`, 'success');
+      });
+    }
+
     // KPI Card Click Handlers
     if (elCardHours) elCardHours.addEventListener('click', openHoursModal);
     if (elCardLeaves) elCardLeaves.addEventListener('click', openLeavesModal);
@@ -2930,27 +3079,47 @@
           // Update existing shift
           const existing = state.shifts.find(s => s.id === editId);
           if (existing) {
-            existing.name = name;
-            existing.code = code.slice(0, 1);
-            existing.enCode = enCode.slice(0, 1).toUpperCase();
-            existing.start = start;
-            existing.end = end;
-            existing.hours = hours;
-            existing.color = color;
-            existing.textColor = textColor;
-            existing.bgTransparent = bgTransparent;
-            existing.targetStaff = targetStaff;
-            existing.isLeave = isLeave;
+            if (editId === 'shift_off') {
+              // shift_off can only update colors and enCode
+              existing.name = '休假';
+              existing.code = '休';
+              existing.enCode = enCode.slice(0, 1);
+              existing.start = '00:00';
+              existing.end = '00:00';
+              existing.hours = 0;
+              existing.color = color;
+              existing.textColor = textColor;
+              existing.bgTransparent = bgTransparent;
+              existing.targetStaff = 0;
+              existing.isLeave = true;
+            } else {
+              existing.name = name;
+              existing.code = code.slice(0, 1);
+              existing.enCode = enCode.slice(0, 1);
+              existing.start = start;
+              existing.end = end;
+              existing.hours = hours;
+              existing.color = color;
+              existing.textColor = textColor;
+              existing.bgTransparent = bgTransparent;
+              existing.targetStaff = targetStaff;
+              existing.isLeave = isLeave;
+            }
             delete formAddShift.dataset.editId;
             const saveBtn = document.getElementById('btn-save-shift');
             if (saveBtn) saveBtn.textContent = '新增班別';
+            // Re-enable disabled fields
+            ['shift-name', 'shift-code', 'shift-start', 'shift-end', 'shift-hours', 'shift-target-staff', 'shift-is-leave'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.disabled = false;
+            });
             saveState();
             renderAll();
             renderShiftsModalList();
-            showToast(`已更新班別：${name} [${existing.code}]`, 'success');
+            showToast(`已更新班別：${existing.name} [${existing.code}]`, 'success');
           }
         } else {
-          const newShift = { id: `shift_${Date.now()}`, name, code: code.slice(0, 1), enCode: enCode.slice(0, 1).toUpperCase(), start, end, hours, color, textColor, bgTransparent, targetStaff, isLeave };
+          const newShift = { id: `shift_${Date.now()}`, name, code: code.slice(0, 1), enCode: enCode.slice(0, 1), start, end, hours, color, textColor, bgTransparent, targetStaff, isLeave };
           state.shifts.push(newShift);
           if (!isLeave && hours > 0) state.shiftFairness.push(newShift.id);
           saveState();

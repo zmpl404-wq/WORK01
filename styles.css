@@ -925,7 +925,30 @@ body {
   right: 0;
   top: 0;
   position: sticky;
-  z-index: 25 !important;
+  z-index: 40 !important;
+  background-color: var(--bg-surface) !important;
+  border-left: 2px solid var(--border-color) !important;
+  box-shadow: -3px 0 8px rgba(0, 0, 0, 0.35);
+}
+
+.schedule-table td.col-total {
+  min-width: 90px;
+  text-align: center;
+  right: 0;
+  position: sticky;
+  z-index: 30 !important;
+  background-color: var(--bg-surface) !important;
+  border-left: 2px solid var(--border-color) !important;
+  box-shadow: -3px 0 8px rgba(0, 0, 0, 0.35);
+}
+
+.schedule-table tfoot th.col-total {
+  min-width: 90px;
+  text-align: center;
+  right: 0;
+  bottom: 0;
+  position: sticky;
+  z-index: 40 !important;
   background-color: var(--bg-surface) !important;
   border-left: 2px solid var(--border-color) !important;
   box-shadow: -3px 0 8px rgba(0, 0, 0, 0.35);
@@ -1988,6 +2011,7 @@ body {
     box-shadow: -3px 0 8px rgba(0,0,0,0.35) !important;
   }
 
+  .compact-table td.col-total,
   .compact-table td.total-cell {
     min-width: 44px !important;
     width: 44px !important;
@@ -1996,7 +2020,7 @@ body {
     text-align: center !important;
     position: sticky !important;
     right: 0 !important;
-    z-index: 25 !important;
+    z-index: 30 !important;
     background-color: var(--bg-surface) !important;
     border-left: 2px solid var(--border-color) !important;
     box-shadow: -3px 0 8px rgba(0,0,0,0.35) !important;
@@ -2433,5 +2457,52 @@ body {
 
 .staff-hour-limit-input:focus {
   border-color: var(--accent-primary);
+}
+
+/* Modal Horizontal Scroll Table with Sticky Name Column (工時、薪資、休假) */
+.horizontal-scroll-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  margin-top: 0.5rem;
+}
+
+.horizontal-scroll-table-wrapper table.detail-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.horizontal-scroll-table-wrapper table.detail-table th,
+.horizontal-scroll-table-wrapper table.detail-table td {
+  white-space: nowrap;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Sticky Name Column in Modal Tables */
+.horizontal-scroll-table-wrapper table.detail-table th:first-child,
+.horizontal-scroll-table-wrapper table.detail-table td:first-child {
+  position: sticky;
+  left: 0;
+  background-color: var(--bg-surface) !important;
+  z-index: 10;
+  border-right: 2px solid var(--border-color);
+  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.horizontal-scroll-table-wrapper table.detail-table th:first-child {
+  z-index: 15;
+}
+
+.horizontal-scroll-table-wrapper table.detail-table tfoot td:first-child {
+  position: sticky;
+  left: 0;
+  background-color: var(--bg-surface) !important;
+  z-index: 10;
+  border-right: 2px solid var(--border-color);
+  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.3);
 }
 
