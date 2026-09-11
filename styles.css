@@ -2056,10 +2056,20 @@ body {
     font-size: 0.8rem !important;
     font-weight: 900 !important;
     justify-content: center !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 2px !important;
   }
 
-  .compact-table .shift-pill-title span:last-child {
-    display: none !important; /* 隱藏長名稱，只留首字代號 */
+  .compact-table .shift-pill-title span {
+    display: inline-block !important;
+  }
+
+  .compact-table .shift-code-text {
+    display: inline-block !important;
+    font-size: 0.82rem !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
   }
 
   .compact-table .shift-pill-time {

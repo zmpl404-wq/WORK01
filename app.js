@@ -915,10 +915,16 @@
           const shortCode = getShiftDisplayShort(shift);
           const fullTitle = getShiftDisplayTitle(shift);
           const otBadge = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}</span>` : '';
+          const isTransparent = !!shift.bgTransparent;
+          const pillClass = isTransparent ? 'shift-pill is-transparent' : 'shift-pill';
+          const pillStyle = isTransparent
+            ? (shift.textColor ? `color:${shift.textColor};` : '')
+            : `background:${shift.color};color:${shift.textColor || '#ffffff'};`;
+
           slot.innerHTML = `
-            <div class="shift-pill" style="background:${shift.color};" title="${escapeHtml(fullTitle)} ${shift.start}~${shift.end}${entry.otHours > 0 ? ` (加班${entry.otHours}h)` : ''}">
+            <div class="${pillClass}" style="${pillStyle}" title="${escapeHtml(fullTitle)} ${shift.start}~${shift.end}${entry.otHours > 0 ? ` (加班${entry.otHours}h)` : ''}">
               <div class="shift-pill-title">
-                <span>${shortCode}</span>
+                <span class="shift-code-text">${shortCode}</span>
                 ${otBadge}
               </div>
             </div>
@@ -2168,7 +2174,7 @@
 
     // Read export settings from Modal
     const langOpt = document.getElementById('excel-lang') ? document.getElementById('excel-lang').value : 'zh';
-    const showColor = document.getElementById('excel-show-color') ? document.getElementById('excel-show-color').checked : true;
+    const showColor = document.getElementById('excel-show-color') ? document.getElementById('excel-show-color').checked : false;
     const staffFormat = document.getElementById('excel-staff-format') ? document.getElementById('excel-staff-format').value : 'name-only';
     const dateFormat = document.getElementById('excel-date-format') ? document.getElementById('excel-date-format').value : 'num';
     const weekFormat = document.getElementById('excel-week-format') ? document.getElementById('excel-week-format').value : 'full';
@@ -2211,6 +2217,25 @@
       return staff.name;
     }
 
+    const titleCss = showColor
+      ? 'background-color: #312e81; color: #ffffff; font-weight: bold; font-size: 13pt; height: 36px;'
+      : 'background-color: transparent; color: #000000; font-weight: bold; font-size: 13pt; height: 36px;';
+    const dateCss = showColor
+      ? 'background-color: #4338ca; color: #ffffff; font-weight: bold;'
+      : 'background-color: transparent; color: #000000; font-weight: bold;';
+    const weekCss = showColor
+      ? 'background-color: #e0e7ff; color: #1e1b4b; font-weight: bold;'
+      : 'background-color: transparent; color: #000000; font-weight: bold;';
+    const staffColCss = showColor
+      ? 'background-color: #f8fafc; font-weight: bold; text-align: left; padding-left: 10px;'
+      : 'background-color: transparent; color: #000000; font-weight: bold; text-align: left; padding-left: 10px;';
+    const emptyRowCss = showColor
+      ? 'border: 0.5pt solid #cccccc; height: 24px; background-color: #ffffff;'
+      : 'border: 0.5pt solid #cccccc; height: 24px; background-color: transparent;';
+    const emptySepCss = showColor
+      ? 'border: none; height: 26px; background-color: #ffffff;'
+      : 'border: none; height: 26px; background-color: transparent;';
+
     let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -2232,14 +2257,14 @@
     body { font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif; }
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 0.5pt solid #999999; text-align: center; vertical-align: middle; padding: 6px 4px; font-size: 11pt; }
-    .title-row { background-color: #312e81; color: #ffffff; font-weight: bold; font-size: 13pt; height: 36px; }
-    .header-date { background-color: #4338ca; color: #ffffff; font-weight: bold; }
-    .header-week { background-color: #e0e7ff; color: #1e1b4b; font-weight: bold; }
-    .staff-name-col { background-color: #f8fafc; font-weight: bold; text-align: left; padding-left: 10px; }
+    .title-row { ${titleCss} }
+    .header-date { ${dateCss} }
+    .header-week { ${weekCss} }
+    .staff-name-col { ${staffColCss} }
     .weekend { color: #dc2626; font-weight: bold; }
-    .shift-cell { font-size: 10pt; font-weight: 600; }
-    .empty-row-cell { border: 0.5pt solid #cccccc; height: 24px; background-color: #ffffff; }
-    .empty-separator { border: none; height: 26px; background-color: #ffffff; }
+    .shift-cell { font-size: 10pt; font-weight: 600; background-color: transparent; }
+    .empty-row-cell { ${emptyRowCss} }
+    .empty-separator { ${emptySepCss} }
   </style>
 </head>
 <body>
@@ -2290,7 +2315,7 @@
             : `${shift.name} [${shift.code}]`;
           const otText = entry.otHours > 0 ? ` (+${entry.otHours}h)` : '';
 
-          let bgStyle = '';
+          let bgStyle = showColor ? '' : 'background-color:transparent;';
           if (showColor) {
             const isOff = shift.isLeave || shift.hours === 0;
             bgStyle = isOff
@@ -2299,7 +2324,7 @@
           }
           html += `<td class="shift-cell" style="${bgStyle}">${escapeHtml(shiftText + otText)}</td>`;
         } else {
-          html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+          html += `<td class="shift-cell" style="background-color:transparent;color:#94a3b8;">-</td>`;
         }
       }
       html += `</tr>`;
@@ -2327,14 +2352,14 @@
         const d = new Date(year, month, day);
         html += `<th class="header-date">${getDayLabel(d)}</th>`;
       } else {
-        html += `<th class="header-date" style="background-color:#64748b;">-</th>`;
+        html += `<th class="header-date" style="${showColor ? 'background-color:#64748b;color:#ffffff;' : 'background-color:transparent;color:#000000;'}">-</th>`;
       }
     }
     if (daysInMonth === 31) {
       const d = new Date(year, month, 31);
       html += `<th class="header-date">${getDayLabel(d)}</th>`;
     } else {
-      html += `<th class="header-date" style="background-color:#64748b;">-</th>`;
+      html += `<th class="header-date" style="${showColor ? 'background-color:#64748b;color:#ffffff;' : 'background-color:transparent;color:#000000;'}">-</th>`;
     }
     html += `</tr>`;
 
@@ -2374,7 +2399,7 @@
               : `${shift.name} [${shift.code}]`;
             const otText = entry.otHours > 0 ? ` (+${entry.otHours}h)` : '';
 
-            let bgStyle = '';
+            let bgStyle = showColor ? '' : 'background-color:transparent;';
             if (showColor) {
               const isOff = shift.isLeave || shift.hours === 0;
               bgStyle = isOff
@@ -2383,10 +2408,10 @@
             }
             html += `<td class="shift-cell" style="${bgStyle}">${escapeHtml(shiftText + otText)}</td>`;
           } else {
-            html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+            html += `<td class="shift-cell" style="background-color:transparent;color:#94a3b8;">-</td>`;
           }
         } else {
-          html += `<td class="shift-cell" style="background-color:#f8fafc;color:#cbd5e1;">-</td>`;
+          html += `<td class="shift-cell" style="${showColor ? 'background-color:#f8fafc;' : 'background-color:transparent;'}color:#cbd5e1;">-</td>`;
         }
       }
       if (daysInMonth === 31) {
@@ -2401,7 +2426,7 @@
             : `${shift.name} [${shift.code}]`;
           const otText = entry.otHours > 0 ? ` (+${entry.otHours}h)` : '';
 
-          let bgStyle = '';
+          let bgStyle = showColor ? '' : 'background-color:transparent;';
           if (showColor) {
             const isOff = shift.isLeave || shift.hours === 0;
             bgStyle = isOff
@@ -2410,10 +2435,10 @@
           }
           html += `<td class="shift-cell" style="${bgStyle}">${escapeHtml(shiftText + otText)}</td>`;
         } else {
-          html += `<td class="shift-cell" style="color:#94a3b8;">-</td>`;
+          html += `<td class="shift-cell" style="background-color:transparent;color:#94a3b8;">-</td>`;
         }
       } else {
-        html += `<td class="shift-cell" style="background-color:#f8fafc;color:#cbd5e1;">-</td>`;
+        html += `<td class="shift-cell" style="${showColor ? 'background-color:#f8fafc;' : 'background-color:transparent;'}color:#cbd5e1;">-</td>`;
       }
       html += `</tr>`;
     });
@@ -2599,7 +2624,17 @@
     const btnAutoSched = document.getElementById('btn-auto-schedule');
     const mBtnAutoSched = document.getElementById('m-btn-auto-schedule');
     if (btnAutoSched) btnAutoSched.addEventListener('click', runAutoScheduler);
-    if (mBtnAutoSched) mBtnAutoSched.addEventListener('click', runAutoScheduler);
+    // On mobile, "自動排班" opens the combined Smart Auto-Schedule + Constraint Rules modal
+    if (mBtnAutoSched) mBtnAutoSched.addEventListener('click', openAutoRulesModal);
+
+    // Quick run auto-schedule button inside modal
+    const btnQuickRunAuto = document.getElementById('btn-quick-run-auto-schedule');
+    if (btnQuickRunAuto) {
+      btnQuickRunAuto.addEventListener('click', () => {
+        if (elAutoRulesModal) elAutoRulesModal.classList.remove('open');
+        runAutoScheduler();
+      });
+    }
 
     // Auto-Schedule Rules Modal buttons
     const btnOpenAutoRules = document.getElementById('btn-open-auto-rules');
@@ -2748,17 +2783,7 @@
     // Excel Export buttons (Opens options modal)
     const openExcelModal = () => {
       if (elExcelModal) {
-        // Pre-fill default titles
-        const year = state.periodStart.getFullYear();
-        const month = state.periodStart.getMonth() + 1;
-        const titleTop = document.getElementById('excel-title-top');
-        const titleBottom = document.getElementById('excel-title-bottom');
-        if (titleTop && !titleTop.value) {
-          titleTop.value = `${year}年${month}月份員工排班總表（上半月：1 ~ 15 號）`;
-        }
-        if (titleBottom && !titleBottom.value) {
-          titleBottom.value = `${year}年${month}月份員工排班總表（下半月）`;
-        }
+        // A1~P1 and A12~P12 custom title fields default to blank
         elExcelModal.classList.add('open');
       }
     };
