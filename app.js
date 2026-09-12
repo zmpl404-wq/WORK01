@@ -148,6 +148,7 @@
   const elBtnSheetClear = document.getElementById('btn-sheet-clear');
   const elBtnCloseBottomSheet = document.getElementById('btn-close-bottom-sheet');
   const elInputOvertimeHours = document.getElementById('input-overtime-hours');
+  const elInputEarlyLeaveHours = document.getElementById('input-early-leave-hours');
 
   // Desktop Popover & Modals
   const elShiftPicker = document.getElementById('shift-picker-popover');
@@ -257,11 +258,12 @@
     const raw = state.schedules[`${staffId}_${dateStr}`];
     if (!raw) return null;
     if (typeof raw === 'string') {
-      return { shiftId: raw, otHours: 0 };
+      return { shiftId: raw, otHours: 0, earlyLeaveHours: 0 };
     }
     return {
       shiftId: raw.shiftId,
-      otHours: Math.max(0, parseFloat(raw.otHours) || 0)
+      otHours: Math.max(0, parseFloat(raw.otHours) || 0),
+      earlyLeaveHours: Math.max(0, parseFloat(raw.earlyLeaveHours) || 0)
     };
   }
 
@@ -436,6 +438,7 @@
   function getStaffHoursBreakdown(staffId, periodDays) {
     let normalHours = 0;
     let otHours = 0;
+    let earlyLeaveHours = 0;
 
     periodDays.forEach(d => {
       const dateStr = formatDateIso(d);
@@ -448,13 +451,17 @@
         if (entry.otHours > 0) {
           otHours += entry.otHours;
         }
+        if (entry.earlyLeaveHours > 0) {
+          earlyLeaveHours += entry.earlyLeaveHours;
+        }
       }
     });
 
     return {
       normalHours,
       otHours,
-      totalHours: normalHours + otHours
+      earlyLeaveHours,
+      totalHours: normalHours + otHours - earlyLeaveHours
     };
   }
 
