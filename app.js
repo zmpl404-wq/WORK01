@@ -74,6 +74,10 @@
       maxDailyShifts: 1,
       maxConsecutiveDays: 6,
       maxDailyHours: 12,
+      periodMaxHours: 160,
+      monthlyLeaveQuota: 8,
+      weekdayShiftMin: {}, // { shiftId: count }
+      holidayShiftMin: {}, // { shiftId: count }
       headcount: {
         weekdayMin: 3,
         weekendMin: 2,
@@ -105,12 +109,22 @@
   const elContainerDay = document.getElementById('container-day-view');
   const elContainerStaff = document.getElementById('container-staff-view');
   const elContainerTable = document.getElementById('container-table-view');
+  const elContainerStats = document.getElementById('container-stats-view');
 
   // Table Elements
   const elTableHeader = document.getElementById('schedule-table-header');
   const elTableBody = document.getElementById('schedule-table-body');
   const elTableFooter = document.getElementById('schedule-table-footer');
   const elLegend = document.getElementById('shifts-legend-container');
+
+  // Stats Table Elements
+  const elStatsTableHeader = document.getElementById('stats-table-header');
+  const elStatsTableBody = document.getElementById('stats-table-body');
+  const elModalShiftDateDetails = document.getElementById('modal-shift-date-details');
+
+  // Rules Settings Elements
+  const elRulePeriodMaxHours = document.getElementById('rule-period-max-hours');
+  const elRuleMonthlyLeaveQuota = document.getElementById('rule-monthly-leave-quota');
 
   // KPI elements
   const elStatHours = document.getElementById('stat-total-hours');
@@ -270,6 +284,10 @@
           maxDailyShifts: 1,
           maxConsecutiveDays: 6,
           maxDailyHours: 12,
+          periodMaxHours: 160,
+          monthlyLeaveQuota: 8,
+          weekdayShiftMin: {},
+          holidayShiftMin: {},
           headcount: { weekdayMin: 3, weekendMin: 2, customDates: [] }
         }, parsed.rules || {});
         state.antiPairs = parsed.antiPairs || [];
@@ -373,6 +391,10 @@
       maxDailyShifts: 1,
       maxConsecutiveDays: 6,
       maxDailyHours: 12,
+      periodMaxHours: 160,
+      monthlyLeaveQuota: 8,
+      weekdayShiftMin: {},
+      holidayShiftMin: {},
       headcount: { weekdayMin: 3, weekendMin: 2, customDates: [] }
     };
     state.antiPairs = [];
@@ -447,19 +469,46 @@
     const maxDailyHours = state.rules.maxDailyHours || 12;
     const periodWeeks = Math.max(1, periodDays.length / 7);
 
-    // 1. Staff-level checks (Consecutive days, Period Overtime, Daily Hours, Role Restrictions)
+    // 1. Staff-level checks (Period Overtime, Leave Quota, Consecutive days, Daily Hours, Role Restrictions)
+    const configuredPeriodMaxHours = (state.rules && typeof state.rules.periodMaxHours === 'number') ? state.rules.periodMaxHours : 160;
+    const configuredMonthlyLeaves = (state.rules && typeof state.rules.monthlyLeaveQuota === 'number') ? state.rules.monthlyLeaveQuota : 8;
+
     state.staff.forEach(staff => {
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
-      const allowedHours = Math.round(staff.maxHours * periodWeeks);
 
-      if (breakdown.totalHours > allowedHours) {
+      // 週期工時超量：依據自訂義設定的時數上限，超過才顯示異常
+      if (breakdown.totalHours > configuredPeriodMaxHours) {
         violations.push({
           staffId: staff.id,
           staffName: staff.name,
           date: '整期累計',
           type: 'overtime',
           title: '週期工時超量',
-          desc: `${staff.name} 當期工時達 ${breakdown.totalHours}h (含加班 ${breakdown.otHours}h)，超過標準上限 ${allowedHours}h`
+          desc: `${staff.name} 當期工時達 ${breakdown.totalHours}h (含加班 ${breakdown.otHours}h)，超過設定上限 ${configuredPeriodMaxHours}h`
+        });
+      }
+
+      // 休假未足額：比對應休天數設定，未足額顯示異常，足額則正常不顯示
+      let actualLeaves = 0;
+      periodDays.forEach(d => {
+        const dateStr = formatDateIso(d);
+        const entry = getScheduleEntry(staff.id, dateStr);
+        if (entry && entry.shiftId) {
+          const shift = state.shifts.find(s => s.id === entry.shiftId);
+          if (shift && (shift.isLeave || shift.hours === 0)) {
+            actualLeaves++;
+          }
+        }
+      });
+
+      if (actualLeaves < configuredMonthlyLeaves) {
+        violations.push({
+          staffId: staff.id,
+          staffName: staff.name,
+          date: '整期累計',
+          type: 'leave-shortage',
+          title: '休假未足額',
+          desc: `${staff.name} 當期排定休假 ${actualLeaves} 天，未達應休天數設定 ${configuredMonthlyLeaves} 天（尚缺 ${configuredMonthlyLeaves - actualLeaves} 天）`
         });
       }
 
@@ -731,55 +780,59 @@
       `;
     }
 
-    // 3. Render Staff Cards for selected day
+    // 3. Render Staff Cards for selected day (精簡為每排 3 格小方塊，僅顯示上班出勤員工)
     if (elMobileStaffCards) {
       elMobileStaffCards.innerHTML = '';
-      state.staff.forEach(staff => {
+
+      const workingStaffList = state.staff.filter(staff => {
         const entry = getScheduleEntry(staff.id, currentDayIso);
-        const shift = entry && entry.shiftId ? state.shifts.find(s => s.id === entry.shiftId) : null;
-        const card = document.createElement('div');
-        card.className = 'mobile-staff-card';
+        if (!entry || !entry.shiftId) return false;
+        const shift = state.shifts.find(s => s.id === entry.shiftId);
+        return shift && !shift.isLeave && shift.hours > 0;
+      });
 
-        let badgeHtml = '';
-        if (shift) {
-          const shiftText = getShiftDisplayTitle(shift);
-          const otBadge = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}h加班</span>` : '';
-          const bgStyle = shift.bgTransparent ? 'background:transparent;border:1px dashed var(--border-color);' : `background:${shift.color};`;
-          badgeHtml = `
-            <div class="mobile-shift-badge" style="${bgStyle}color:${shift.textColor || '#ffffff'};">
-              <span>${escapeHtml(shiftText)} ${shift.hours > 0 ? `(${shift.hours}h)` : ''}</span>
-              ${otBadge}
-            </div>
-          `;
-        } else {
-          badgeHtml = `
-            <div class="mobile-shift-badge" style="background:var(--bg-subtle);color:var(--text-muted);border:1px dashed var(--border-color);">
-              <span>未排班（點擊指派）</span>
-            </div>
-          `;
-        }
-
-        card.innerHTML = `
-          <div class="mobile-staff-card-header">
-            <div class="mobile-staff-info">
-              <div class="staff-avatar" style="background:${staff.color};">
-                ${staff.name.slice(0, 1)}
-              </div>
-              <div>
-                <span class="staff-name">${escapeHtml(staff.name)}</span>
-                <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
-              </div>
-            </div>
-            ${badgeHtml}
+      if (workingStaffList.length === 0) {
+        elMobileStaffCards.innerHTML = `
+          <div style="text-align:center;padding:2.5rem 1rem;color:var(--text-muted);background:var(--glass-bg);border:1px dashed var(--border-color);border-radius:var(--radius-lg);width:100%;">
+            <div style="font-size:1.8rem;margin-bottom:0.4rem;">☕</div>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--text-secondary);">本日暫無上班出勤人員</div>
+            <div style="font-size:0.75rem;margin-top:0.25rem;">可點擊上方導覽切換至「當期」或「總表」為同仁排班</div>
           </div>
         `;
+      } else {
+        const grid = document.createElement('div');
+        grid.className = 'mobile-staff-mini-grid';
 
-        card.addEventListener('click', () => {
-          openBottomSheet(staff, currentDayIso, DAY_NAMES_ZH[dayOfWeek]);
+        workingStaffList.forEach(staff => {
+          const entry = getScheduleEntry(staff.id, currentDayIso);
+          const shift = state.shifts.find(s => s.id === entry.shiftId);
+          const card = document.createElement('div');
+          card.className = 'staff-mini-card';
+
+          const shiftCodeText = getShiftDisplayShort(shift);
+          const otText = (entry && entry.otHours > 0) ? `+${entry.otHours}h` : '';
+          const shiftLabel = `${shift.name} ${otText}`.trim();
+
+          card.innerHTML = `
+            <div class="staff-mini-card-avatar" style="background:${staff.color};border-color:${staff.color};">
+              ${staff.name.slice(0, 1)}
+            </div>
+            <div class="staff-mini-card-name" title="${escapeHtml(staff.name)}">${escapeHtml(staff.name)}</div>
+            <div class="staff-mini-card-role">${escapeHtml(staff.role)}</div>
+            <div class="staff-mini-card-shift" style="background:${shift.color};color:${shift.textColor || '#ffffff'};" title="${escapeHtml(shift.name)}">
+              ${escapeHtml(shiftLabel)}
+            </div>
+          `;
+
+          card.addEventListener('click', () => {
+            openBottomSheet(staff, currentDayIso, DAY_NAMES_ZH[dayOfWeek]);
+          });
+
+          grid.appendChild(card);
         });
 
-        elMobileStaffCards.appendChild(card);
-      });
+        elMobileStaffCards.appendChild(grid);
+      }
     }
   }
 
@@ -826,6 +879,26 @@
           </span>
         `;
       });
+
+      // 新增休假計數
+      let leaveDaysCount = 0;
+      days.forEach(d => {
+        const dateIso = formatDateIso(d);
+        const entry = getScheduleEntry(staff.id, dateIso);
+        if (entry && entry.shiftId) {
+          const shift = state.shifts.find(s => s.id === entry.shiftId);
+          if (shift && (shift.isLeave || shift.hours === 0)) {
+            leaveDaysCount++;
+          }
+        }
+      });
+
+      badgesHtml += `
+        <span class="staff-shift-count-badge" style="background:rgba(239, 68, 68, 0.15);color:var(--accent-danger);border:1px solid rgba(239, 68, 68, 0.4);" title="當期累計排定休假天數">
+          休 ${leaveDaysCount}
+        </span>
+      `;
+
       badgesHtml += `
         <span class="staff-hours-divider"></span>
         <span class="staff-hours-total">時數: ${breakdown.totalHours}H</span>
@@ -1067,6 +1140,179 @@
   }
 
   // ==========================================================================
+  // VIEW 4: Shift Count Stats Table Mode (班數總表呈現)
+  // 顯示在下方，內容使用總表的顯示內容修改：
+  // - 姓名欄固定不滑動
+  // - 姓名不顯示職稱
+  // - 上方日期欄改成班別
+  // - 中間顯示對應員工該班別的班數數字
+  // - 點擊數字彈框顯示該員工上該班別的日期（例 9/1(二)），一行一行列出，支援直接更改班別
+  // ==========================================================================
+  function renderStatsTableView() {
+    if (!elStatsTableHeader || !elStatsTableBody) return;
+    const periodDays = getPeriodDays();
+
+    // 1. Header: 姓名欄 + 各班別 + 總計
+    elStatsTableHeader.innerHTML = `<th class="col-staff">姓名</th>`;
+
+    state.shifts.forEach(shift => {
+      const th = document.createElement('th');
+      th.className = 'col-shift';
+      const bg = shift.bgTransparent ? 'transparent' : shift.color;
+      const fg = shift.textColor || '#ffffff';
+      th.innerHTML = `
+        <span style="display:inline-block;padding:0.18rem 0.5rem;border-radius:4px;background:${bg};color:${fg};${shift.bgTransparent ? 'border:1px solid ' + shift.color : ''};font-size:0.75rem;white-space:nowrap;">
+          ${escapeHtml(shift.name)}
+        </span>
+      `;
+      th.title = `${shift.name} (${shift.hours}h)`;
+      elStatsTableHeader.appendChild(th);
+    });
+
+    const thTotal = document.createElement('th');
+    thTotal.className = 'col-total';
+    thTotal.textContent = '總班數';
+    elStatsTableHeader.appendChild(thTotal);
+
+    // 2. Body: 每個員工一列
+    elStatsTableBody.innerHTML = '';
+    state.staff.forEach(staff => {
+      const tr = document.createElement('tr');
+
+      // 姓名欄（固定不滑動、不顯示職稱）
+      const tdStaff = document.createElement('td');
+      tdStaff.className = 'staff-row-cell';
+      tdStaff.innerHTML = `
+        <div class="staff-info-compact" title="${escapeHtml(staff.name)}">
+          <div class="staff-color-dot" style="background:${staff.color};"></div>
+          <span class="staff-name-text">${escapeHtml(staff.name)}</span>
+        </div>
+      `;
+      tr.appendChild(tdStaff);
+
+      let totalStaffWorkShifts = 0;
+
+      // 統計該同仁在當期各班別的排定日期與次數
+      state.shifts.forEach(shift => {
+        const matchingDates = [];
+        periodDays.forEach(d => {
+          const dateIso = formatDateIso(d);
+          const entry = getScheduleEntry(staff.id, dateIso);
+          if (entry && entry.shiftId === shift.id) {
+            matchingDates.push({
+              date: d,
+              dateIso: dateIso,
+              otHours: entry.otHours || 0
+            });
+          }
+        });
+
+        const count = matchingDates.length;
+        if (!shift.isLeave && shift.hours > 0) {
+          totalStaffWorkShifts += count;
+        }
+
+        const td = document.createElement('td');
+        td.className = 'stats-count-cell';
+        td.innerHTML = `
+          <span class="stats-count-badge ${count > 0 ? 'has-count' : ''}">
+            ${count}
+          </span>
+        `;
+        td.title = `點擊查看 ${staff.name}「${shift.name}」出勤日期`;
+
+        td.addEventListener('click', () => {
+          openShiftDateDetailsModal(staff, shift, matchingDates);
+        });
+
+        tr.appendChild(td);
+      });
+
+      // 總班數
+      const tdTotal = document.createElement('td');
+      tdTotal.className = 'col-total';
+      tdTotal.innerHTML = `<b>${totalStaffWorkShifts}</b> 班`;
+      tr.appendChild(tdTotal);
+
+      elStatsTableBody.appendChild(tr);
+    });
+  }
+
+  function openShiftDateDetailsModal(staff, shift, matchingDates) {
+    if (!elModalShiftDateDetails) return;
+    const nameEl = document.getElementById('shift-details-staff-name');
+    const shiftEl = document.getElementById('shift-details-shift-name');
+    const listEl = document.getElementById('shift-date-details-list');
+
+    if (nameEl) nameEl.textContent = staff.name;
+    if (shiftEl) shiftEl.textContent = shift.name;
+
+    if (listEl) {
+      listEl.innerHTML = '';
+      if (matchingDates.length === 0) {
+        listEl.innerHTML = `
+          <div style="text-align:center;padding:1.75rem 1rem;color:var(--text-muted);background:var(--bg-secondary);border-radius:var(--radius-md);">
+            當期暫無排定「${escapeHtml(shift.name)}」出勤紀錄
+          </div>
+        `;
+      } else {
+        matchingDates.forEach(item => {
+          const d = item.date;
+          const dateStr = `${d.getMonth() + 1}/${d.getDate()}(${DAY_NAMES_SHORT_ZH[d.getDay()]})`;
+          const row = document.createElement('div');
+          row.className = 'shift-detail-date-row';
+
+          let optionsHtml = '';
+          state.shifts.forEach(s => {
+            const isSel = s.id === shift.id;
+            optionsHtml += `<option value="${s.id}" ${isSel ? 'selected' : ''}>${escapeHtml(s.name)} (${s.hours}h)</option>`;
+          });
+          optionsHtml += `<option value="__clear__">❌ 清除排班</option>`;
+
+          row.innerHTML = `
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+              <span style="font-weight:700;color:var(--text-primary);font-size:0.92rem;">📅 ${dateStr}</span>
+              ${item.otHours > 0 ? `<span style="font-size:0.75rem;color:#f59e0b;font-weight:600;">(加班 ${item.otHours}h)</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              <label style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">改為：</label>
+              <select class="form-control change-shift-select" style="font-size:0.8rem;padding:0.25rem 0.5rem;width:auto;">
+                ${optionsHtml}
+              </select>
+            </div>
+          `;
+
+          const selectEl = row.querySelector('.change-shift-select');
+          selectEl.addEventListener('change', (e) => {
+            const newShiftId = e.target.value;
+            if (newShiftId === '__clear__') {
+              assignShift(staff.id, item.dateIso, null, 0);
+            } else {
+              assignShift(staff.id, item.dateIso, newShiftId, item.otHours);
+            }
+            // 重新整理明細列表
+            const periodDays = getPeriodDays();
+            const updatedDates = [];
+            periodDays.forEach(day => {
+              const dIso = formatDateIso(day);
+              const ent = getScheduleEntry(staff.id, dIso);
+              if (ent && ent.shiftId === shift.id) {
+                updatedDates.push({ date: day, dateIso: dIso, otHours: ent.otHours || 0 });
+              }
+            });
+            openShiftDateDetailsModal(staff, shift, updatedDates);
+            renderStatsTableView();
+          });
+
+          listEl.appendChild(row);
+        });
+      }
+    }
+
+    elModalShiftDateDetails.classList.add('open');
+  }
+
+  // ==========================================================================
   // Render KPI Dashboard
   // ==========================================================================
   function renderKPIDashboard() {
@@ -1088,12 +1334,16 @@
       const otCost = breakdown.otHours * staff.wage * state.otMultiplier;
       totalCost += (normalCost + otCost);
 
-      // Hours over-limit count
-      const allowed = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : (staff.maxHours * Math.max(1, periodDays.length / 7));
+      // Hours over-limit count (依據規則設定之週期工時上限)
+      const allowed = (state.rules && typeof state.rules.periodMaxHours === 'number') 
+        ? state.rules.periodMaxHours 
+        : (staff.maxHours * Math.max(1, periodDays.length / 7));
       if (breakdown.totalHours > allowed) hoursOverCount++;
 
-      // Leave short count
-      const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : 8;
+      // Leave short count (依據規則設定之每月應休天數)
+      const quota = (state.rules && typeof state.rules.monthlyLeaveQuota === 'number') 
+        ? state.rules.monthlyLeaveQuota 
+        : (staff.leaveQuota || 8);
       let actualLeaves = 0;
       periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
@@ -1159,15 +1409,18 @@
     if (elContainerDay) elContainerDay.style.display = 'none';
     if (elContainerStaff) elContainerStaff.style.display = 'none';
     if (elContainerTable) elContainerTable.style.display = 'none';
+    if (elContainerStats) elContainerStats.style.display = 'none';
 
     // Update active tab button styles
-    ['day', 'staff', 'week'].forEach(view => {
-      const btn = document.getElementById(`view-toggle-${view}`);
-      if (btn) {
-        if (state.currentView === view) btn.classList.add('active');
-        else btn.classList.remove('active');
-      }
-    });
+    const btnDay = document.getElementById('view-toggle-day');
+    const btnStaff = document.getElementById('view-toggle-staff');
+    const btnStats = document.getElementById('btn-open-shift-stats');
+    const btnWeek = document.getElementById('view-toggle-week');
+
+    if (btnDay) btnDay.classList.toggle('active', state.currentView === 'day');
+    if (btnStaff) btnStaff.classList.toggle('active', state.currentView === 'staff');
+    if (btnStats) btnStats.classList.toggle('active', state.currentView === 'stats');
+    if (btnWeek) btnWeek.classList.toggle('active', state.currentView === 'week');
 
     if (state.currentView === 'day') {
       if (elContainerDay) elContainerDay.style.display = 'block';
@@ -1175,6 +1428,9 @@
     } else if (state.currentView === 'staff') {
       if (elContainerStaff) elContainerStaff.style.display = 'block';
       renderStaffView();
+    } else if (state.currentView === 'stats') {
+      if (elContainerStats) elContainerStats.style.display = 'block';
+      renderStatsTableView();
     } else {
       if (elContainerTable) elContainerTable.style.display = 'block';
       renderTable();
@@ -1851,10 +2107,14 @@
     const elMaxShifts = document.getElementById('rule-max-shifts-day');
     const elMaxConsecutive = document.getElementById('rule-max-consecutive-days');
     const elMaxDaily = document.getElementById('rule-max-daily-hours');
+    const elPeriodMaxHours = document.getElementById('rule-period-max-hours');
+    const elMonthlyLeaves = document.getElementById('rule-monthly-leave-quota');
 
     if (elMaxShifts) elMaxShifts.value = state.rules.maxDailyShifts || 1;
     if (elMaxConsecutive) elMaxConsecutive.value = state.rules.maxConsecutiveDays || 6;
     if (elMaxDaily) elMaxDaily.value = state.rules.maxDailyHours || 12;
+    if (elPeriodMaxHours) elPeriodMaxHours.value = (typeof state.rules.periodMaxHours === 'number') ? state.rules.periodMaxHours : 160;
+    if (elMonthlyLeaves) elMonthlyLeaves.value = (typeof state.rules.monthlyLeaveQuota === 'number') ? state.rules.monthlyLeaveQuota : 8;
   }
 
   function renderHeadcountRulesUI() {
@@ -2019,6 +2279,55 @@
       };
     }
 
+    // Render 各班別平日與假日最低人力需求
+    const shiftHeadcountContainer = document.getElementById('auto-shifts-headcount-container');
+    if (shiftHeadcountContainer) {
+      shiftHeadcountContainer.innerHTML = '';
+      const workShifts = state.shifts.filter(s => !s.isLeave && s.hours > 0);
+      state.rules.weekdayShiftMin = state.rules.weekdayShiftMin || {};
+      state.rules.holidayShiftMin = state.rules.holidayShiftMin || {};
+
+      workShifts.forEach(shift => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.4rem 0.6rem;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius-sm);flex-wrap:wrap;';
+
+        const curWeekdayMin = typeof state.rules.weekdayShiftMin[shift.id] === 'number' ? state.rules.weekdayShiftMin[shift.id] : (shift.targetStaff || 1);
+        const curHolidayMin = typeof state.rules.holidayShiftMin[shift.id] === 'number' ? state.rules.holidayShiftMin[shift.id] : (shift.targetStaff || 1);
+
+        row.innerHTML = `
+          <div style="display:flex;align-items:center;gap:0.4rem;min-width:110px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${shift.color};"></span>
+            <span style="font-weight:700;font-size:0.85rem;color:var(--text-primary);">${escapeHtml(shift.name)}</span>
+            <span style="font-size:0.72rem;color:var(--text-muted);">(${shift.hours}h)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:0.35rem;">
+              <label style="font-size:0.78rem;color:var(--text-secondary);white-space:nowrap;">平日：</label>
+              <input type="number" class="form-control inp-shift-weekday-min" data-shift-id="${shift.id}" value="${curWeekdayMin}" min="0" max="30" style="width:65px;padding:0.25rem 0.4rem;font-size:0.8rem;">
+              <span style="font-size:0.72rem;color:var(--text-muted);">人</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.35rem;">
+              <label style="font-size:0.78rem;color:var(--text-secondary);white-space:nowrap;">假日：</label>
+              <input type="number" class="form-control inp-shift-holiday-min" data-shift-id="${shift.id}" value="${curHolidayMin}" min="0" max="30" style="width:65px;padding:0.25rem 0.4rem;font-size:0.8rem;">
+              <span style="font-size:0.72rem;color:var(--text-muted);">人</span>
+            </div>
+          </div>
+        `;
+
+        row.querySelector('.inp-shift-weekday-min').addEventListener('change', (e) => {
+          state.rules.weekdayShiftMin[shift.id] = Math.max(0, parseInt(e.target.value, 10) || 0);
+          saveState();
+        });
+
+        row.querySelector('.inp-shift-holiday-min').addEventListener('change', (e) => {
+          state.rules.holidayShiftMin[shift.id] = Math.max(0, parseInt(e.target.value, 10) || 0);
+          saveState();
+        });
+
+        shiftHeadcountContainer.appendChild(row);
+      });
+    }
+
     const fairnessContainer = document.getElementById('shift-fairness-toggles-container');
     if (fairnessContainer) {
       fairnessContainer.innerHTML = '';
@@ -2099,7 +2408,7 @@
   }
 
   // ==========================================================================
-  // Auto-Scheduling Solver (依據互斥、偏好、公平性平均指派)
+  // Auto-Scheduling Solver (依據互斥、偏好、公平性平均指派，帶入除錯設定以達成 0 異常)
   // ==========================================================================
   function runAutoScheduler() {
     if (!confirm('自動排班將覆蓋現有班表內容，確認繼續？')) {
@@ -2119,10 +2428,16 @@
       return;
     }
 
-    // Initialize shift counts per staff for fairness
+    const maxConsecutive = state.rules.maxConsecutiveDays || 6;
+    const maxDailyHours = state.rules.maxDailyHours || 12;
+    const periodMaxHours = (state.rules && typeof state.rules.periodMaxHours === 'number') ? state.rules.periodMaxHours : 160;
+
+    // Initialize shift counts & hours per staff for fairness and hour balancing
     const shiftCountMap = {};
+    const staffHoursMap = {};
     state.staff.forEach(s => {
       shiftCountMap[s.id] = {};
+      staffHoursMap[s.id] = 0;
       workShifts.forEach(sh => { shiftCountMap[s.id][sh.id] = 0; });
     });
 
@@ -2134,9 +2449,28 @@
       });
     });
 
-    periodDays.forEach(d => {
+    // Helper: 計算某同仁在此日前已連續上班幾天
+    function getStreakDaysBefore(staffId, dayIndex) {
+      let streak = 0;
+      for (let i = dayIndex - 1; i >= 0; i--) {
+        const prevIso = formatDateIso(periodDays[i]);
+        const entry = getScheduleEntry(staffId, prevIso);
+        if (entry && entry.shiftId) {
+          const shift = state.shifts.find(sh => sh.id === entry.shiftId);
+          if (shift && !shift.isLeave && shift.hours > 0) {
+            streak++;
+            continue;
+          }
+        }
+        break;
+      }
+      return streak;
+    }
+
+    periodDays.forEach((d, dayIndex) => {
       const dateIso = formatDateIso(d);
       const dayOfWeek = d.getDay();
+      const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
       const workingToday = new Set();
 
       // 1. Assign day-offs according to preferences
@@ -2146,9 +2480,12 @@
         }
       });
 
-      // 2. For each work shift, assign staff
+      // 2. For each work shift, determine requirement based on weekday vs holiday setting
       workShifts.forEach(shift => {
-        let needed = shift.targetStaff || 1;
+        let needed = isWeekend
+          ? (state.rules.holidayShiftMin && typeof state.rules.holidayShiftMin[shift.id] === 'number' ? state.rules.holidayShiftMin[shift.id] : (shift.targetStaff || 1))
+          : (state.rules.weekdayShiftMin && typeof state.rules.weekdayShiftMin[shift.id] === 'number' ? state.rules.weekdayShiftMin[shift.id] : (shift.targetStaff || 1));
+
         if (state.customShiftRequirements) {
           const customReq = state.customShiftRequirements.find(r => r.date === dateIso && r.shiftId === shift.id);
           if (customReq && typeof customReq.count === 'number') {
@@ -2158,17 +2495,27 @@
         if (needed <= 0) return;
         let assigned = 0;
 
-        // Candidate filtering
-        const candidates = state.staff.filter(staff => {
+        // Candidate filtering with debugging constraints (防連勤過長、防工時超量、防互斥、防職位衝突)
+        const filterCandidate = (staff, strictHours = true) => {
           const key = `${staff.id}_${dateIso}`;
           if (state.schedules[key]) return false; // Already assigned or off
           if (workingToday.has(staff.id)) return false;
 
-          // Check role restrictions
+          // 1. 除錯規則：連續出勤上限 (超過法定上限絕對不能排)
+          const currentStreak = getStreakDaysBefore(staff.id, dayIndex);
+          if (currentStreak + 1 > maxConsecutive) return false;
+
+          // 2. 除錯規則：單日最高工時上限
+          if (shift.hours > maxDailyHours) return false;
+
+          // 3. 除錯規則：週期工時上限 (超過則優先讓給其他同仁)
+          if (strictHours && (staffHoursMap[staff.id] + shift.hours > periodMaxHours)) return false;
+
+          // 4. 除錯規則：職位限制
           const restricted = state.roleRestrictions.some(r => r.role === staff.role && r.shiftId === shift.id);
           if (restricted) return false;
 
-          // Check anti-pair conflict
+          // 5. 除錯規則：搭檔互斥衝突
           const conflict = state.antiPairs.some(pair => {
             if (pair[0] === staff.id && workingToday.has(pair[1])) return true;
             if (pair[1] === staff.id && workingToday.has(pair[0])) return true;
@@ -2177,30 +2524,37 @@
           if (conflict) return false;
 
           return true;
-        });
+        };
 
-        // Sort by fairness (balance shifts selected in shiftFairness)
+        let candidates = state.staff.filter(s => filterCandidate(s, true));
+        // 如果嚴格限制下人數不足，在不違反連勤與互斥的前提下稍放寬工時限制
+        if (candidates.length < needed) {
+          candidates = state.staff.filter(s => filterCandidate(s, false));
+        }
+
+        // Sort by fairness & accumulated hours
         const isFairnessShift = state.shiftFairness ? state.shiftFairness.includes(shift.id) : true;
-        if (isFairnessShift) {
-          candidates.sort((a, b) => {
+        candidates.sort((a, b) => {
+          if (isFairnessShift) {
             const countA = shiftCountMap[a.id][shift.id] || 0;
             const countB = shiftCountMap[b.id][shift.id] || 0;
-            return countA - countB;
-          });
-        }
+            if (countA !== countB) return countA - countB;
+          }
+          return (staffHoursMap[a.id] || 0) - (staffHoursMap[b.id] || 0);
+        });
 
         for (let i = 0; i < needed && i < candidates.length; i++) {
           const chosen = candidates[i];
           state.schedules[`${chosen.id}_${dateIso}`] = { shiftId: shift.id, otHours: 0 };
           workingToday.add(chosen.id);
           shiftCountMap[chosen.id][shift.id] = (shiftCountMap[chosen.id][shift.id] || 0) + 1;
+          staffHoursMap[chosen.id] = (staffHoursMap[chosen.id] || 0) + (shift.hours || 0);
           assigned++;
         }
       });
 
       // 2.1 Enforce Weekday / Weekend minimum headcount requirement
       const headcountRules = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
-      const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
       let requiredMin = isWeekend ? (headcountRules.weekendMin ?? 2) : (headcountRules.weekdayMin ?? 3);
       if (headcountRules.customDates) {
         const customMatch = headcountRules.customDates.find(c => c.date === dateIso);
@@ -2214,8 +2568,13 @@
           const key = `${staff.id}_${dateIso}`;
           if (state.schedules[key]) return false;
           if (workingToday.has(staff.id)) return false;
+          const streak = getStreakDaysBefore(staff.id, dayIndex);
+          if (streak + 1 > maxConsecutive) return false;
           return true;
         });
+
+        // 依工時升序補足人力
+        remainingStaff.sort((a, b) => (staffHoursMap[a.id] || 0) - (staffHoursMap[b.id] || 0));
 
         for (const candidate of remainingStaff) {
           if (workingToday.size >= requiredMin) break;
@@ -2236,6 +2595,7 @@
             state.schedules[`${candidate.id}_${dateIso}`] = { shiftId: availableShift.id, otHours: 0 };
             workingToday.add(candidate.id);
             shiftCountMap[candidate.id][availableShift.id] = (shiftCountMap[candidate.id][availableShift.id] || 0) + 1;
+            staffHoursMap[candidate.id] = (staffHoursMap[candidate.id] || 0) + (availableShift.hours || 0);
           }
         }
       }
@@ -2252,7 +2612,12 @@
 
     saveState();
     renderAll();
-    showToast('✨ 智慧自動排班已完成！已遵循搭檔互斥、職位限制與平均分配。', 'success');
+    const violationsAfter = getAllViolations();
+    if (violationsAfter.length === 0) {
+      showToast('✨ 智慧自動排班已完成！產出之班表零異常，完全符合各項法規與人力設定！', 'success');
+    } else {
+      showToast(`✨ 智慧自動排班已完成！已最大化排班，目前檢測到 ${violationsAfter.length} 項需要微調之狀況。`, 'info');
+    }
   }
 
   // ==========================================================================
@@ -2287,12 +2652,19 @@
             </div>
           </div>
         </div>
-        <div>
+        <div style="display:flex;align-items:center;gap:0.35rem;">
+          <button class="btn btn-icon-only btn-edit-staff" data-id="${staff.id}" title="編輯員工資料" style="color:var(--accent-primary);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+          </button>
           <button class="btn btn-icon-only btn-delete-staff" data-id="${staff.id}" title="移除員工" style="color:var(--accent-danger);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           </button>
         </div>
       `;
+
+      item.querySelector('.btn-edit-staff').addEventListener('click', () => {
+        startEditStaff(staff);
+      });
 
       item.querySelector('.btn-delete-staff').addEventListener('click', () => {
         if (confirm(`確定要移除「${staff.name}」嗎？這將一併清除該同仁的排班紀錄。`)) {
@@ -2310,6 +2682,51 @@
 
       listEl.appendChild(item);
     });
+  }
+
+  function startEditStaff(staff) {
+    const editIdEl = document.getElementById('staff-edit-id');
+    const nameEl = document.getElementById('staff-name');
+    const roleEl = document.getElementById('staff-role');
+    const wageEl = document.getElementById('staff-wage');
+    const maxHoursEl = document.getElementById('staff-max-hours');
+    const colorEl = document.getElementById('staff-color');
+    const offPrefEl = document.getElementById('staff-off-pref');
+    const titleEl = document.getElementById('staff-form-title');
+    const btnSave = document.getElementById('btn-save-staff');
+    const btnCancel = document.getElementById('btn-cancel-edit-staff');
+
+    if (editIdEl) editIdEl.value = staff.id;
+    if (nameEl) nameEl.value = staff.name;
+    if (roleEl) roleEl.value = staff.role;
+    if (wageEl) wageEl.value = staff.wage;
+    if (maxHoursEl) maxHoursEl.value = staff.maxHours;
+    if (colorEl) colorEl.value = staff.color;
+    if (offPrefEl) offPrefEl.value = staff.offPref;
+
+    if (titleEl) titleEl.textContent = `✏️ 編輯員工：${staff.name}`;
+    if (btnSave) btnSave.textContent = '💾 儲存修改';
+    if (btnCancel) btnCancel.style.display = 'inline-block';
+
+    if (nameEl) nameEl.focus();
+  }
+
+  function cancelEditStaff() {
+    const editIdEl = document.getElementById('staff-edit-id');
+    const nameEl = document.getElementById('staff-name');
+    const wageEl = document.getElementById('staff-wage');
+    const maxHoursEl = document.getElementById('staff-max-hours');
+    const titleEl = document.getElementById('staff-form-title');
+    const btnSave = document.getElementById('btn-save-staff');
+    const btnCancel = document.getElementById('btn-cancel-edit-staff');
+
+    if (editIdEl) editIdEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (wageEl) wageEl.value = '200';
+    if (maxHoursEl) maxHoursEl.value = '40';
+    if (titleEl) titleEl.textContent = '👤 新增員工同仁';
+    if (btnSave) btnSave.textContent = '＋ 加入同仁';
+    if (btnCancel) btnCancel.style.display = 'none';
   }
 
   function renderRolesManagementUI() {
@@ -2686,7 +3103,8 @@
       const d = new Date(year, month, 31);
       html += `<th class="header-date">${getDayLabel(d)}</th>`;
     } else {
-      html += `<th class="header-date" style="${showColor ? 'background-color:#64748b;color:#ffffff;' : 'background-color:transparent;color:#000000;'}">-</th>`;
+      // Q 欄無日期輸出時清空，連 - 都不要有
+      html += `<th class="header-date" style="background-color:transparent;"></th>`;
     }
     html += `</tr>`;
 
@@ -2698,7 +3116,7 @@
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         html += `<th class="header-week ${isWeekend ? 'weekend' : ''}">${getWeekLabel(d)}</th>`;
       } else {
-        html += `<th class="header-week" style="color:#94a3b8;">-</th>`;
+        html += `<th class="header-week" style="color:#94a3b8;"></th>`;
       }
     }
     if (daysInMonth === 31) {
@@ -2706,7 +3124,8 @@
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
       html += `<th class="header-week ${isWeekend ? 'weekend' : ''}">${getWeekLabel(d)}</th>`;
     } else {
-      html += `<th class="header-week" style="color:#94a3b8;">-</th>`;
+      // Q 欄無星期輸出時清空，連 - 都不要有
+      html += `<th class="header-week"></th>`;
     }
     html += `</tr>`;
 
@@ -2738,7 +3157,7 @@
             html += `<td class="shift-cell" style="background-color:transparent;color:#94a3b8;">-</td>`;
           }
         } else {
-          html += `<td class="shift-cell" style="${showColor ? 'background-color:#f8fafc;' : 'background-color:transparent;'}color:#cbd5e1;">-</td>`;
+          html += `<td class="shift-cell" style="background-color:transparent;"></td>`;
         }
       }
       if (daysInMonth === 31) {
@@ -2762,10 +3181,12 @@
           }
           html += `<td class="shift-cell" style="${bgStyle}">${escapeHtml(shiftText + otText)}</td>`;
         } else {
-          html += `<td class="shift-cell" style="background-color:transparent;color:#94a3b8;">-</td>`;
+          // Q 欄 31 號若無文字數字輸出，清空連 - 都不要有
+          html += `<td class="shift-cell" style="background-color:transparent;"></td>`;
         }
       } else {
-        html += `<td class="shift-cell" style="${showColor ? 'background-color:#f8fafc;' : 'background-color:transparent;'}color:#cbd5e1;">-</td>`;
+        // Q 欄非 31 天月份清空，連 - 都不要有
+        html += `<td class="shift-cell" style="background-color:transparent;"></td>`;
       }
       html += `</tr>`;
     });
@@ -2911,7 +3332,9 @@
     }
     if (btnOpenShiftStats) {
       btnOpenShiftStats.addEventListener('click', () => {
-        openShiftStatsModal();
+        state.currentView = 'stats';
+        renderActiveView();
+        showToast('📊 已切換為班數出勤統計總表', 'info');
       });
     }
     if (btnViewWeek) {
@@ -3079,10 +3502,14 @@
         const maxShifts = parseInt(document.getElementById('rule-max-shifts-day').value, 10) || 1;
         const maxConsecutive = parseInt(document.getElementById('rule-max-consecutive-days').value, 10) || 6;
         const maxDailyHours = parseFloat(document.getElementById('rule-max-daily-hours').value) || 12;
+        const periodMaxHours = parseFloat(document.getElementById('rule-period-max-hours').value) || 160;
+        const monthlyLeaveQuota = parseInt(document.getElementById('rule-monthly-leave-quota').value, 10) || 8;
 
         state.rules.maxDailyShifts = maxShifts;
         state.rules.maxConsecutiveDays = maxConsecutive;
         state.rules.maxDailyHours = maxDailyHours;
+        state.rules.periodMaxHours = periodMaxHours;
+        state.rules.monthlyLeaveQuota = monthlyLeaveQuota;
 
         saveState();
         renderAll();
@@ -3245,11 +3672,12 @@
       });
     }
 
-    // Add Staff Form Submit
+    // Add / Edit Staff Form Submit
     const formAddStaff = document.getElementById('form-add-staff');
     if (formAddStaff) {
       formAddStaff.addEventListener('submit', (e) => {
         e.preventDefault();
+        const editId = document.getElementById('staff-edit-id') ? document.getElementById('staff-edit-id').value : '';
         const name = document.getElementById('staff-name').value.trim();
         const role = document.getElementById('staff-role').value;
         const wage = parseFloat(document.getElementById('staff-wage').value) || 200;
@@ -3259,14 +3687,38 @@
 
         if (!name) return;
 
-        const newStaff = { id: `staff_${Date.now()}`, name, role, wage, maxHours, color, offPref, leaveQuota: 8 };
-        state.staff.push(newStaff);
+        if (editId) {
+          // 編輯現有人員
+          const existing = state.staff.find(s => s.id === editId);
+          if (existing) {
+            existing.name = name;
+            existing.role = role;
+            existing.wage = wage;
+            existing.maxHours = maxHours;
+            existing.color = color;
+            existing.offPref = offPref;
+            showToast(`已成功更新同仁：${name}`, 'success');
+          }
+          cancelEditStaff();
+        } else {
+          // 新增同仁
+          const newStaff = { id: `staff_${Date.now()}`, name, role, wage, maxHours, color, offPref, leaveQuota: 8 };
+          state.staff.push(newStaff);
+          showToast(`已成功新增同仁：${name}`, 'success');
+          cancelEditStaff();
+        }
+
         saveState();
         renderAll();
         renderStaffModalList();
-        showToast(`已成功新增同仁：${name}`, 'success');
-        document.getElementById('staff-name').value = '';
       });
+
+      const btnCancelEdit = document.getElementById('btn-cancel-edit-staff');
+      if (btnCancelEdit) {
+        btnCancelEdit.addEventListener('click', () => {
+          cancelEditStaff();
+        });
+      }
     }
 
     // Add Shift Form Submit (簡化：留中文名稱、中文代碼、英文代碼、假別標記, 字體顏色, 透明)

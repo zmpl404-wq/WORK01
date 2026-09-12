@@ -295,6 +295,33 @@
       </div>
     </main>
 
+    <!-- ==========================================================================
+         VIEW 4: Shift Count Stats Table Mode (班數總表呈現)
+         ========================================================================== -->
+    <main id="container-stats-view" class="board-container" style="display:none;">
+      <div class="board-header-toolbar">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <span style="font-weight:700;font-size:0.875rem;color:var(--text-primary);">📊 當期各班別出勤統計總表</span>
+          <span style="font-size:0.75rem;color:var(--text-muted);">💡 點擊下方班數數字，可查看出勤日期並直接更改班別</span>
+        </div>
+      </div>
+
+      <div class="schedule-table-wrapper" id="stats-table-scroll-container">
+        <table class="schedule-table compact-table stats-table" id="stats-table">
+          <thead>
+            <tr id="stats-table-header">
+              <th class="col-staff">姓名</th>
+              <!-- Dynamic Shift Headers -->
+              <th class="col-total">總計</th>
+            </tr>
+          </thead>
+          <tbody id="stats-table-body">
+            <!-- Dynamic Staff Shift Count Rows -->
+          </tbody>
+        </table>
+      </div>
+    </main>
+
   </div>
 
   <!-- Popover: Quick Shift Picker (Desktop Table Cell Click) -->
@@ -402,9 +429,13 @@
 
         <hr style="border:0;border-top:1px solid var(--border-color);">
 
-        <!-- Section: Add Staff Member -->
+        <!-- Section: Add/Edit Staff Member -->
         <form id="form-add-staff">
-          <h4 style="font-size:0.9rem;font-weight:700;color:var(--text-primary);margin-bottom:0.75rem;">👤 新增員工同仁</h4>
+          <input type="hidden" id="staff-edit-id" value="">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <h4 id="staff-form-title" style="font-size:0.9rem;font-weight:700;color:var(--text-primary);margin:0;">👤 新增員工同仁</h4>
+            <button type="button" id="btn-cancel-edit-staff" class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;display:none;">取消編輯</button>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label for="staff-name">員工姓名 *</label>
@@ -612,6 +643,18 @@
               <span style="font-size:0.75rem;color:var(--text-muted);">單日多班時數累計超過此數值即標記超時警示。</span>
             </div>
 
+            <div class="form-group">
+              <label for="rule-period-max-hours">週期工時上限設定 (小時)</label>
+              <input type="number" id="rule-period-max-hours" class="form-control" value="160" min="10" max="400" required>
+              <span style="font-size:0.75rem;color:var(--text-muted);">當期累計工時超過此數值時，除錯中將顯示「週期工時超量」異常。</span>
+            </div>
+
+            <div class="form-group">
+              <label for="rule-monthly-leave-quota">每月應休假天數設定 (天)</label>
+              <input type="number" id="rule-monthly-leave-quota" class="form-control" value="8" min="0" max="31" required>
+              <span style="font-size:0.75rem;color:var(--text-muted);">當期排定休假未達此天數將顯示「休假未足額」異常，休假足額則正常不顯示。</span>
+            </div>
+
             <div style="display:flex;justify-content:flex-end;">
               <button type="submit" class="btn btn-primary">儲存規則設定</button>
             </div>
@@ -689,18 +732,28 @@
             👥 平日與假日最低人力設定
           </h4>
           <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.6rem;">
-            自動排班時，系統將確保每日出勤同仁數達到此標準，不足時自動補足人力。
+            自動排班時，系統將確保每日各班別與總出勤人數達到設定標準，並同時帶入除錯約束（防超時、防連勤、防互斥），使產出班表零異常。
           </p>
-          <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;padding-bottom:0.6rem;border-bottom:1px dashed var(--border-color);">
             <div style="display:flex;align-items:center;gap:0.45rem;">
-              <label for="auto-rule-weekday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">平日最低：</label>
+              <label for="auto-rule-weekday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">平日總最低：</label>
               <input type="number" id="auto-rule-weekday-headcount" class="form-control" value="3" min="0" max="50" style="width:75px;">
               <span style="font-size:0.75rem;color:var(--text-muted);">人以上</span>
             </div>
             <div style="display:flex;align-items:center;gap:0.45rem;">
-              <label for="auto-rule-holiday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">假日最低：</label>
+              <label for="auto-rule-holiday-headcount" style="font-size:0.825rem;color:var(--text-secondary);">假日總最低：</label>
               <input type="number" id="auto-rule-holiday-headcount" class="form-control" value="2" min="0" max="50" style="width:75px;">
               <span style="font-size:0.75rem;color:var(--text-muted);">人以上</span>
+            </div>
+          </div>
+
+          <div style="margin-top:0.4rem;">
+            <div style="font-size:0.82rem;font-weight:700;color:var(--text-primary);margin-bottom:0.4rem;display:flex;align-items:center;justify-content:space-between;">
+              <span>📌 各班別平日與假日最低出勤人數</span>
+              <span style="font-size:0.72rem;color:var(--text-muted);font-weight:normal;">(設定個別班別人數要求)</span>
+            </div>
+            <div id="auto-shifts-headcount-container" style="display:flex;flex-direction:column;gap:0.45rem;">
+              <!-- Dynamically populated from state.shifts in JS -->
             </div>
           </div>
         </div>
@@ -973,7 +1026,7 @@
             💾 儲存為預設值
           </button>
           <button id="btn-export-csv" class="btn btn-secondary" title="匯出 JSON 備份檔，方便備份或轉移裝置">
-            📄 匯出 JSON
+            💾 匯出 JSON 備份
           </button>
         </div>
         <div style="display:flex;gap:0.5rem;">
@@ -983,6 +1036,32 @@
           </button>
           <button class="btn btn-secondary modal-close-btn" data-close="modal-excel-options">取消</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       Modal: Shift Date Details & Change Shift (班數點擊明細與直接換班)
+       ========================================================================== -->
+  <div id="modal-shift-date-details" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-shift-date-details-title">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-shift-date-details-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span id="shift-details-staff-name">-</span> - <span id="shift-details-shift-name">-</span> 出勤日期明細
+        </h3>
+        <button class="btn btn-icon-only modal-close-btn" data-close="modal-shift-date-details">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">
+          以下為該同仁於當期排定此班別的所有日期，可直接在右側選單更改班別：
+        </p>
+        <div id="shift-date-details-list" style="display:flex;flex-direction:column;gap:0.5rem;max-height:360px;overflow-y:auto;padding-right:4px;">
+          <!-- Dynamic rendered rows -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close-btn" data-close="modal-shift-date-details">完成</button>
       </div>
     </div>
   </div>
