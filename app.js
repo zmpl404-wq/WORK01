@@ -947,9 +947,10 @@
           }
           const codeText = getShiftDisplayShort(shift);
           const otText = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}h</span>` : '';
+          const elText = (entry.earlyLeaveHours || 0) > 0 ? `<span class="ot-badge" style="background:rgba(239,68,68,0.25);color:#ef4444;">-${entry.earlyLeaveHours}h</span>` : '';
           pill.innerHTML = `
             <span class="staff-day-pill-name" style="font-size:0.62rem;white-space:nowrap;">${dayTitle}</span>
-            <span class="staff-day-pill-code" style="color:${shift.textColor || '#ffffff'};font-weight:800;">${codeText} ${otText}</span>
+            <span class="staff-day-pill-code" style="color:${shift.textColor || '#ffffff'};font-weight:800;">${codeText} ${otText}${elText}</span>
           `;
         } else {
           pill.innerHTML = `
@@ -1030,6 +1031,7 @@
           const shortCode = getShiftDisplayShort(shift);
           const fullTitle = getShiftDisplayTitle(shift);
           const otBadge = entry.otHours > 0 ? `<span class="ot-badge">+${entry.otHours}</span>` : '';
+          const elBadge = (entry.earlyLeaveHours || 0) > 0 ? `<span class="ot-badge" style="background:rgba(239,68,68,0.25);color:#ef4444;">-${entry.earlyLeaveHours}</span>` : '';
           const isTransparent = !!shift.bgTransparent;
           const pillClass = isTransparent ? 'shift-pill is-transparent' : 'shift-pill';
           const pillStyle = isTransparent
@@ -1037,10 +1039,10 @@
             : `background:${shift.color};color:${shift.textColor || '#ffffff'};`;
 
           slot.innerHTML = `
-            <div class="${pillClass}" style="${pillStyle}" title="${escapeHtml(fullTitle)} ${shift.start}~${shift.end}${entry.otHours > 0 ? ` (加班${entry.otHours}h)` : ''}">
+            <div class="${pillClass}" style="${pillStyle}" title="${escapeHtml(fullTitle)} ${shift.start}~${shift.end}${entry.otHours > 0 ? ` (加班+${entry.otHours}h)` : ''}${(entry.earlyLeaveHours||0) > 0 ? ` (早退-${entry.earlyLeaveHours}h)` : ''}">
               <div class="shift-pill-title">
                 <span class="shift-code-text">${shortCode}</span>
-                ${otBadge}
+                ${otBadge}${elBadge}
               </div>
             </div>
           `;
@@ -1326,6 +1328,7 @@
     const periodDays = getPeriodDays();
     let totalNormalHours = 0;
     let totalOtHours = 0;
+    let totalEarlyLeaveHours = 0;
     let totalShiftsAssigned = 0;
     let totalCost = 0;
     let totalLeaveDays = 0;
@@ -1336,21 +1339,21 @@
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
       totalNormalHours += breakdown.normalHours;
       totalOtHours += breakdown.otHours;
+      totalEarlyLeaveHours += (breakdown.earlyLeaveHours || 0);
 
       const normalCost = breakdown.normalHours * staff.wage;
       const otCost = breakdown.otHours * staff.wage * state.otMultiplier;
-      totalCost += (normalCost + otCost);
+      const elDeduction = (breakdown.earlyLeaveHours || 0) * staff.wage;
+      totalCost += (normalCost + otCost - elDeduction);
 
-      // Hours over-limit count (依據規則設定之週期工時上限)
-      const allowed = (state.rules && typeof state.rules.periodMaxHours === 'number') 
-        ? state.rules.periodMaxHours 
-        : (staff.maxHours * Math.max(1, periodDays.length / 7));
-      if (breakdown.totalHours > allowed) hoursOverCount++;
+      // Hours over-limit: use per-staff periodMaxHours if set
+      const allowed = typeof staff.periodMaxHours === 'number'
+        ? staff.periodMaxHours
+        : null;
+      if (allowed !== null && breakdown.totalHours > allowed) hoursOverCount++;
 
-      // Leave short count (依據規則設定之每月應休天數)
-      const quota = (state.rules && typeof state.rules.monthlyLeaveQuota === 'number') 
-        ? state.rules.monthlyLeaveQuota 
-        : (staff.leaveQuota || 8);
+      // Leave short count: use per-staff leaveQuota if set
+      const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : null;
       let actualLeaves = 0;
       periodDays.forEach(d => {
         const dateIso = formatDateIso(d);
@@ -1367,10 +1370,10 @@
           }
         }
       });
-      if (actualLeaves < quota) leaveShortCount++;
+      if (quota !== null && actualLeaves < quota) leaveShortCount++;
     });
 
-    const grandTotalHours = totalNormalHours + totalOtHours;
+    const grandTotalHours = totalNormalHours + totalOtHours - totalEarlyLeaveHours;
     const avgHours = state.staff.length > 0 ? (grandTotalHours / state.staff.length).toFixed(1) : 0;
 
     if (elStatHours) {
@@ -1452,18 +1455,20 @@
   // ==========================================================================
   // Shift Assignment Logic
   // ==========================================================================
-  function assignShift(staffId, dateStr, shiftId, otHours = 0) {
+  function assignShift(staffId, dateStr, shiftId, otHours = 0, earlyLeaveHours = 0) {
     const key = `${staffId}_${dateStr}`;
     if (shiftId === null) {
       delete state.schedules[key];
       showToast('已清除排班', 'success');
     } else {
+      const existingEntry = state.schedules[key] || {};
       state.schedules[key] = {
         shiftId: shiftId,
-        otHours: Math.max(0, parseFloat(otHours) || 0)
+        otHours: Math.max(0, parseFloat(otHours) || 0),
+        earlyLeaveHours: Math.max(0, parseFloat(earlyLeaveHours) || (existingEntry.earlyLeaveHours || 0))
       };
       const shift = state.shifts.find(s => s.id === shiftId);
-      const otMsg = otHours > 0 ? ` (加班 ${otHours}h)` : '';
+      const otMsg = otHours > 0 ? ` (加班 +${otHours}h)` : '';
       showToast(`已排定：${shift ? shift.name : ''}${otMsg}`, 'success');
     }
     saveState();
@@ -1482,6 +1487,9 @@
     const currentEntry = getScheduleEntry(staff.id, dateStr);
     if (elInputOvertimeHours) {
       elInputOvertimeHours.value = currentEntry ? (currentEntry.otHours || 0) : 0;
+    }
+    if (elInputEarlyLeaveHours) {
+      elInputEarlyLeaveHours.value = currentEntry ? (currentEntry.earlyLeaveHours || 0) : 0;
     }
 
     if (elDrawerShiftsList) {
@@ -1509,7 +1517,8 @@
 
         item.addEventListener('click', () => {
           const enteredOt = elInputOvertimeHours ? (parseFloat(elInputOvertimeHours.value) || 0) : 0;
-          assignShift(staff.id, dateStr, shift.id, enteredOt);
+          const enteredEl = elInputEarlyLeaveHours ? (parseFloat(elInputEarlyLeaveHours.value) || 0) : 0;
+          assignShift(staff.id, dateStr, shift.id, enteredOt, enteredEl);
           closeBottomSheet();
         });
 
@@ -1534,8 +1543,9 @@
 
     const currentEntry = getScheduleEntry(staffId, dateStr);
     const initialOt = currentEntry ? currentEntry.otHours : 0;
+    const initialEl = currentEntry ? currentEntry.earlyLeaveHours : 0;
 
-    // 1. Overtime input row in popover
+    // 1a. Overtime input row in popover
     const otRow = document.createElement('div');
     otRow.className = 'popover-ot-row';
     otRow.innerHTML = `
@@ -1546,6 +1556,19 @@
       </div>
     `;
     elShiftPicker.appendChild(otRow);
+
+    // 1b. Early leave input row in popover
+    const elRow = document.createElement('div');
+    elRow.className = 'popover-ot-row';
+    elRow.style.borderTop = '1px dashed var(--border-color)';
+    elRow.innerHTML = `
+      <span style="color:var(--accent-danger);">🚪 當日早退：</span>
+      <div style="display:flex;align-items:center;gap:3px;">
+        <input type="number" id="popover-input-el" class="popover-ot-input" value="${initialEl}" min="0" max="12" step="0.5">
+        <span>h</span>
+      </div>
+    `;
+    elShiftPicker.appendChild(elRow);
 
     // 2. Shift Options List
     state.shifts.forEach(shift => {
@@ -1565,8 +1588,10 @@
 
       item.addEventListener('click', () => {
         const inputOt = document.getElementById('popover-input-ot');
+        const inputEl = document.getElementById('popover-input-el');
         const otVal = inputOt ? (parseFloat(inputOt.value) || 0) : 0;
-        assignShift(staffId, dateStr, shift.id, otVal);
+        const elVal = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
+        assignShift(staffId, dateStr, shift.id, otVal, elVal);
         closeShiftPicker();
       });
 
@@ -1606,15 +1631,15 @@
     const periodDays = getPeriodDays();
 
     let html = `
-      <!-- 一鍵套用全員自訂義工時 -->
+      <!-- 一鍵套用全員時數上限 -->
       <div class="card-embedded" style="margin-bottom:1rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
           <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-            <span style="font-size:0.85rem;font-weight:700;">自訂時數上限：</span>
-            <input type="number" id="input-batch-hours-limit" class="form-control" value="160" min="0" max="999" style="width:80px;">
+            <span style="font-size:0.85rem;font-weight:700;">時數上限：</span>
+            <input type="number" id="input-batch-hours-limit" class="form-control" placeholder="輸入時數" min="0" max="9999" style="width:90px;">
             <span style="font-size:0.75rem;color:var(--text-muted);">小時</span>
           </div>
-          <button id="btn-apply-batch-hours-limit" class="btn btn-secondary" style="font-size:0.8rem;">一鍵套用全員自訂義工時</button>
+          <button id="btn-apply-batch-hours-limit" class="btn btn-secondary" style="font-size:0.8rem;">一鍵套用全員時數上限</button>
         </div>
       </div>
 
@@ -1626,6 +1651,7 @@
               <th>時數上限</th>
               <th>時數</th>
               <th>加班</th>
+              <th>早退</th>
               <th>總時數</th>
               <th>檢核</th>
               <th>調整上限</th>
@@ -1636,24 +1662,28 @@
 
     state.staff.forEach(staff => {
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
-      const allowed = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : (staff.maxHours * Math.max(1, periodDays.length / 7));
-      const isOver = breakdown.totalHours > allowed;
+      const allowed = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : null;
+      const isOver = allowed !== null && breakdown.totalHours > allowed;
+      const allowedDisplay = allowed !== null ? `${Math.round(allowed)}h` : '未設定';
+      const allowedVal = allowed !== null ? Math.round(allowed) : '';
 
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
-          <td>${Math.round(allowed)}h</td>
+          <td>${allowedDisplay}</td>
           <td>${breakdown.normalHours}h</td>
           <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours > 0 ? `+${breakdown.otHours}h` : '0h'}</td>
+          <td style="color:var(--accent-danger);font-weight:700;">${(breakdown.earlyLeaveHours || 0) > 0 ? `-${breakdown.earlyLeaveHours}h` : '0h'}</td>
           <td style="font-weight:800;font-size:0.95rem;">${breakdown.totalHours}h</td>
           <td>
-            <span class="headcount-status-badge ${isOver ? 'status-shortage' : 'status-ok'}">
-              ${isOver ? '異常' : '正常'}
-            </span>
+            ${allowed !== null
+              ? `<span class="headcount-status-badge ${isOver ? 'status-shortage' : 'status-ok'}">${isOver ? '超標' : '正常'}</span>`
+              : `<span class="headcount-status-badge" style="background:var(--bg-subtle);color:var(--text-muted);">未設定</span>`
+            }
           </td>
           <td>
             <div style="display:flex;align-items:center;gap:4px;">
-              <input type="number" class="leave-quota-input hours-limit-input" data-staff-id="${staff.id}" value="${Math.round(allowed)}" min="0" max="999" style="width:70px;">
+              <input type="number" class="leave-quota-input hours-limit-input" data-staff-id="${staff.id}" value="${allowedVal}" placeholder="輸入上限" min="0" max="9999" style="width:70px;">
               <span style="font-size:0.75rem;color:var(--text-muted);">h</span>
               <button class="btn btn-secondary btn-save-hours-limit" data-staff-id="${staff.id}" style="padding:0.2rem 0.5rem;font-size:0.72rem;">儲存</button>
             </div>
@@ -1719,8 +1749,10 @@
     const periodDays = getPeriodDays();
     let sumNormalHours = 0;
     let sumOtHours = 0;
+    let sumElHours = 0;
     let sumNormalCost = 0;
     let sumOtCost = 0;
+    let sumElDeduction = 0;
     let sumTotalCost = 0;
 
     let html = `
@@ -1743,6 +1775,8 @@
               <th>薪資</th>
               <th>加班</th>
               <th>加班費</th>
+              <th>早退</th>
+              <th>早退扣薪</th>
               <th>總薪資</th>
             </tr>
           </thead>
@@ -1753,12 +1787,15 @@
       const breakdown = getStaffHoursBreakdown(staff.id, periodDays);
       const normalPay = Math.round(breakdown.normalHours * staff.wage);
       const otPay = Math.round(breakdown.otHours * staff.wage * state.otMultiplier);
-      const totalPay = normalPay + otPay;
+      const elDeduction = Math.round((breakdown.earlyLeaveHours || 0) * staff.wage);
+      const totalPay = normalPay + otPay - elDeduction;
 
       sumNormalHours += breakdown.normalHours;
       sumOtHours += breakdown.otHours;
+      sumElHours += (breakdown.earlyLeaveHours || 0);
       sumNormalCost += normalPay;
       sumOtCost += otPay;
+      sumElDeduction += elDeduction;
       sumTotalCost += totalPay;
 
       html += `
@@ -1767,8 +1804,10 @@
           <td>NT$ ${staff.wage}</td>
           <td>${breakdown.normalHours}h</td>
           <td>NT$ ${normalPay.toLocaleString()}</td>
-          <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours > 0 ? `${breakdown.otHours}h` : '0h'}</td>
+          <td style="color:#f59e0b;font-weight:700;">${breakdown.otHours > 0 ? `+${breakdown.otHours}h` : '0h'}</td>
           <td style="color:#f59e0b;">NT$ ${otPay.toLocaleString()}</td>
+          <td style="color:var(--accent-danger);font-weight:700;">${(breakdown.earlyLeaveHours || 0) > 0 ? `-${breakdown.earlyLeaveHours}h` : '0h'}</td>
+          <td style="color:var(--accent-danger);">-NT$ ${elDeduction.toLocaleString()}</td>
           <td style="font-weight:800;color:var(--accent-primary);font-size:0.95rem;">NT$ ${totalPay.toLocaleString()}</td>
         </tr>
       `;
@@ -1784,6 +1823,8 @@
               <td>NT$ ${sumNormalCost.toLocaleString()}</td>
               <td style="color:#f59e0b;">${sumOtHours > 0 ? `+${sumOtHours}h` : '0h'}</td>
               <td style="color:#f59e0b;">NT$ ${sumOtCost.toLocaleString()}</td>
+              <td style="color:var(--accent-danger);">${sumElHours > 0 ? `-${sumElHours}h` : '0h'}</td>
+              <td style="color:var(--accent-danger);">-NT$ ${sumElDeduction.toLocaleString()}</td>
               <td style="color:var(--accent-primary);font-size:1.05rem;">NT$ ${sumTotalCost.toLocaleString()}</td>
             </tr>
           </tfoot>
@@ -1842,7 +1883,7 @@
     `;
 
     state.staff.forEach(staff => {
-      const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : 8;
+      const quota = typeof staff.leaveQuota === 'number' ? staff.leaveQuota : null;
       let actualLeaves = 0;
 
       periodDays.forEach(d => {
@@ -1856,20 +1897,24 @@
         }
       });
 
-      const diff = quota - actualLeaves;
-      const isShort = diff > 0;
+      let statusHtml;
+      if (quota === null) {
+        statusHtml = `<span class="headcount-status-badge" style="background:var(--bg-subtle);color:var(--text-muted);">未設定</span>`;
+      } else {
+        const diff = quota - actualLeaves;
+        const isShort = diff > 0;
+        statusHtml = `<span class="headcount-status-badge ${diff === 0 ? 'status-ok' : (isShort ? 'status-shortage' : 'status-ok')}">${diff === 0 ? '已足額' : (isShort ? `尚缺 ${diff} 天` : `超出 ${Math.abs(diff)} 天`)}</span>`;
+      }
 
       html += `
         <tr>
           <td><b>${escapeHtml(staff.name)}</b></td>
           <td>
-            <input type="number" class="leave-quota-input" data-staff-id="${staff.id}" value="${quota}" min="0" max="31">
+            <input type="number" class="leave-quota-input" data-staff-id="${staff.id}" value="${quota !== null ? quota : ''}" placeholder="輸入天數" min="0" max="31">
           </td>
           <td><span class="leave-actual-badge">${actualLeaves} 天</span></td>
           <td>
-            <span class="headcount-status-badge ${diff === 0 ? 'status-ok' : (isShort ? 'status-shortage' : 'status-ok')}">
-              ${diff === 0 ? '已足額' : (isShort ? `尚缺 ${diff} 天` : `超出 ${Math.abs(diff)} 天`)}
-            </span>
+            ${statusHtml}
           </td>
           <td>
             <button class="btn btn-secondary btn-save-single-quota" data-staff-id="${staff.id}" style="padding:0.25rem 0.55rem;font-size:0.75rem;">
@@ -1896,11 +1941,13 @@
         if (input) {
           const staff = state.staff.find(s => s.id === staffId);
           if (staff) {
-            staff.leaveQuota = parseInt(input.value, 10) || 0;
+            const raw = input.value.trim();
+            staff.leaveQuota = raw === '' ? null : (parseInt(raw, 10) || 0);
             saveState();
             renderLeavesModalUI();
             renderKPIDashboard();
-            showToast(`已更新 ${staff.name} 應休天數為 ${staff.leaveQuota} 天`, 'success');
+            const dispVal = staff.leaveQuota !== null ? `${staff.leaveQuota} 天` : '未設定';
+            showToast(`已更新 ${staff.name} 應休天數為 ${dispVal}`, 'success');
           }
         }
       });
@@ -2707,7 +2754,7 @@
     if (nameEl) nameEl.value = staff.name;
     if (roleEl) roleEl.value = staff.role;
     if (wageEl) wageEl.value = staff.wage;
-    if (maxHoursEl) maxHoursEl.value = staff.maxHours;
+    if (maxHoursEl) maxHoursEl.value = typeof staff.periodMaxHours === 'number' ? staff.periodMaxHours : (staff.maxHours * 4 || 160);
     if (colorEl) colorEl.value = staff.color;
     if (offPrefEl) offPrefEl.value = staff.offPref;
 
@@ -3688,7 +3735,8 @@
         const name = document.getElementById('staff-name').value.trim();
         const role = document.getElementById('staff-role').value;
         const wage = parseFloat(document.getElementById('staff-wage').value) || 200;
-        const maxHours = parseFloat(document.getElementById('staff-max-hours').value) || 40;
+        const periodMaxHoursInput = parseFloat(document.getElementById('staff-max-hours').value);
+        const periodMaxHours = isNaN(periodMaxHoursInput) ? null : periodMaxHoursInput;
         const color = document.getElementById('staff-color').value;
         const offPref = document.getElementById('staff-off-pref').value;
 
@@ -3701,7 +3749,7 @@
             existing.name = name;
             existing.role = role;
             existing.wage = wage;
-            existing.maxHours = maxHours;
+            if (periodMaxHours !== null) existing.periodMaxHours = periodMaxHours;
             existing.color = color;
             existing.offPref = offPref;
             showToast(`已成功更新同仁：${name}`, 'success');
@@ -3709,7 +3757,8 @@
           cancelEditStaff();
         } else {
           // 新增同仁
-          const newStaff = { id: `staff_${Date.now()}`, name, role, wage, maxHours, color, offPref, leaveQuota: 8 };
+          const newStaff = { id: `staff_${Date.now()}`, name, role, wage, maxHours: 40, color, offPref, leaveQuota: null };
+          if (periodMaxHours !== null) newStaff.periodMaxHours = periodMaxHours;
           state.staff.push(newStaff);
           showToast(`已成功新增同仁：${name}`, 'success');
           cancelEditStaff();
@@ -3857,9 +3906,32 @@
           existing.otHours = enteredOt;
           saveState();
           renderAll();
-          showToast(`已儲存加班 ${enteredOt} 小時`, 'success');
+          showToast(`已儲存加班 +${enteredOt} 小時`, 'success');
         } else {
           showToast('請先指派班別再儲存加班時數', 'warning');
+        }
+      });
+    }
+
+    // ======================================================================
+    // Save Early Leave from Drawer (with confirmation)
+    // ======================================================================
+    const btnSaveDrawerEl = document.getElementById('btn-save-drawer-el');
+    if (btnSaveDrawerEl) {
+      btnSaveDrawerEl.addEventListener('click', () => {
+        if (!state.activeTarget) return;
+        const enteredEl = elInputEarlyLeaveHours ? (parseFloat(elInputEarlyLeaveHours.value) || 0) : 0;
+        if (!confirm(`確認將早退時數儲存為 ${enteredEl} 小時？（將從工時與薪資中扣除）`)) return;
+
+        const key = `${state.activeTarget.staffId}_${state.activeTarget.dateStr}`;
+        const existing = state.schedules[key];
+        if (existing) {
+          existing.earlyLeaveHours = enteredEl;
+          saveState();
+          renderAll();
+          showToast(`已儲存早退 -${enteredEl} 小時`, 'success');
+        } else {
+          showToast('請先指派班別再儲存早退時數', 'warning');
         }
       });
     }

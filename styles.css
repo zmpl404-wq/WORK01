@@ -1958,16 +1958,16 @@ body {
   }
 
   .view-toggle-btn {
-    padding: 0.45rem 0.15rem;
-    font-size: 0.76rem;
+    padding: 0.3rem 0.1rem;
+    font-size: 0.72rem;
     font-weight: 700;
     justify-content: center;
     align-items: center;
     flex-direction: column;
     writing-mode: vertical-rl;
     text-orientation: upright;
-    letter-spacing: 2px;
-    min-height: 72px;
+    letter-spacing: 1px;
+    min-height: 52px;
     white-space: nowrap;
   }
 
