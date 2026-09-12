@@ -719,7 +719,9 @@
         const dow = d.getDay();
         const isWk = dow === 0 || dow === 6;
 
-        let dayTarget = isWk ? headcountRules.weekendMin : headcountRules.weekdayMin;
+        let dayTarget = isWk
+          ? (typeof headcountRules.weekendMin === 'number' ? headcountRules.weekendMin : 2)
+          : (typeof headcountRules.weekdayMin === 'number' ? headcountRules.weekdayMin : 3);
         if (headcountRules.customDates) {
           const match = headcountRules.customDates.find(c => c.date === dIso);
           if (match && typeof match.min === 'number') dayTarget = match.min;
@@ -752,10 +754,12 @@
       }
     }
 
-    // 2. Headcount requirement & adequacy
+    // 2. Headcount requirement & adequacy (連動除錯設定中的最低人力與自訂日期設定)
     const headcountRules = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    let targetHeadcount = isWeekend ? headcountRules.weekendMin : headcountRules.weekdayMin;
+    let targetHeadcount = isWeekend
+      ? (typeof headcountRules.weekendMin === 'number' ? headcountRules.weekendMin : 2)
+      : (typeof headcountRules.weekdayMin === 'number' ? headcountRules.weekdayMin : 3);
     if (headcountRules.customDates) {
       const match = headcountRules.customDates.find(c => c.date === currentDayIso);
       if (match && typeof match.min === 'number') targetHeadcount = match.min;
@@ -787,17 +791,10 @@
       const isAdequate = onDutyCount >= targetHeadcount;
       elDaySummaryHeadcount.innerHTML = `
         <div class="day-headcount-wrapper">
-          <span>上班 <b>${onDutyCount}</b> 人 / 需 <button type="button" class="btn-headcount-edit" id="btn-edit-day-headcount" title="點擊設定此日最低人力（連動除錯人力設定）"><b>${targetHeadcount}</b> 人 ✏️</button></span>
+          <span>需 <b>${targetHeadcount}</b> 人</span>
           <span class="headcount-light ${isAdequate ? 'light-green' : 'light-red'}" title="${isAdequate ? '人力充足（亮綠燈）' : '人數不足（亮紅燈）'}"></span>
         </div>
       `;
-
-      const btnEditHeadcount = document.getElementById('btn-edit-day-headcount');
-      if (btnEditHeadcount) {
-        btnEditHeadcount.addEventListener('click', () => {
-          editDayHeadcountTarget(currentDayIso, dayOfWeek, targetHeadcount);
-        });
-      }
     }
 
     // 3. Render Staff Cards for selected day (精簡為每排 3 格小方塊，僅顯示上班出勤員工)
@@ -857,39 +854,6 @@
         elMobileStaffCards.appendChild(grid);
       }
     }
-  }
-
-  function editDayHeadcountTarget(dateIso, dayOfWeek, currentVal) {
-    const isWk = dayOfWeek === 0 || dayOfWeek === 6;
-    const dayTypeStr = isWk ? '假日' : '平日';
-    const input = prompt(`【人力設定連動除錯】\n請設定 ${dateIso} (${dayTypeStr}) 所需最低出勤人力 (人)：\n\n・輸入數字：更新此日期之特殊最低人力\n・輸入 c 或 clear：清除此日期特殊設定，回歸${dayTypeStr}預設值 (${isWk ? (state.rules.headcount.weekendMin || 2) : (state.rules.headcount.weekdayMin || 3)}人)\n・若需修改全域平日/假日通則，請至「除錯」中設定`, currentVal);
-
-    if (input === null) return;
-    const trimmed = input.trim().toLowerCase();
-    state.rules.headcount = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
-    state.rules.headcount.customDates = state.rules.headcount.customDates || [];
-
-    if (trimmed === 'c' || trimmed === 'clear') {
-      state.rules.headcount.customDates = state.rules.headcount.customDates.filter(c => c.date !== dateIso);
-      saveState();
-      renderAll();
-      renderHeadcountRulesUI();
-      showToast(`已清除 ${dateIso} 特殊人力設定，回歸${dayTypeStr}通則`, 'info');
-      return;
-    }
-
-    const val = parseInt(trimmed, 10);
-    if (isNaN(val) || val < 0) {
-      showToast('請輸入有效的人數數字', 'warning');
-      return;
-    }
-
-    state.rules.headcount.customDates = state.rules.headcount.customDates.filter(c => c.date !== dateIso);
-    state.rules.headcount.customDates.push({ date: dateIso, min: val });
-    saveState();
-    renderAll();
-    renderHeadcountRulesUI();
-    showToast(`已將 ${dateIso} 最低人力需求設定為 ${val} 人（已同步至除錯人力設定）`, 'success');
   }
 
   // ==========================================================================
@@ -2763,7 +2727,7 @@
               <span class="staff-role-badge">${escapeHtml(staff.role)}</span>
             </div>
             <div style="font-size:0.75rem;color:var(--text-muted);">
-              時薪 NT$${staff.wage} ・ 週基準 ${staff.maxHours}h ・ 應休 ${staff.leaveQuota || 8}天 ・ 偏好休 ${offText}
+              時薪 NT$${staff.wage} ・ 偏好休 ${offText}
             </div>
           </div>
         </div>
@@ -3637,15 +3601,15 @@
     const btnSaveHeadcount = document.getElementById('btn-save-headcount-rules');
     if (btnSaveHeadcount) {
       btnSaveHeadcount.addEventListener('click', () => {
-        const wk = parseInt(document.getElementById('rule-weekday-headcount').value, 10) || 3;
-        const hol = parseInt(document.getElementById('rule-holiday-headcount').value, 10) || 2;
+        const wk = parseInt(document.getElementById('rule-weekday-headcount').value, 10);
+        const hol = parseInt(document.getElementById('rule-holiday-headcount').value, 10);
         state.rules.headcount = state.rules.headcount || { weekdayMin: 3, weekendMin: 2, customDates: [] };
-        state.rules.headcount.weekdayMin = wk;
-        state.rules.headcount.weekendMin = hol;
+        state.rules.headcount.weekdayMin = isNaN(wk) ? 3 : Math.max(0, wk);
+        state.rules.headcount.weekendMin = isNaN(hol) ? 2 : Math.max(0, hol);
 
         saveState();
         renderAll();
-        showToast('✅ 執勤人力規則已儲存！', 'success');
+        showToast('✅ 執勤人力規則已儲存！單日所需人數已同步更新', 'success');
       });
     }
 
